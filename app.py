@@ -1,63 +1,123 @@
-import os
-import yaml
 import time
-import uuid
-from datetime import datetime
-from typing import Dict, Any, Optional
-from fastapi import FastAPI, HTTPException, Query
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from contextlib import asynccontextmanager
-import chromadb
-from chromadb.config import Settings
 
-from api_schemas import StandardResponse, HealthData, ErrorDetail
+from config.settings import Settings
+from database.chromadb_client import ChromaDBClient
+from llm.client import LLMClient
+from api import health, search, test
 
-# Global variables for configuration, startup time, and database
-config: Dict[str, Any] = {}
+# Global instances
+settings = Settings()
+db_client = ChromaDBClient(settings.config)
+llm_client = LLMClient(settings.config)
 startup_time: float = 0
-chroma_client: Optional[chromadb.ClientAPI] = None
-inventory_collection: Optional[chromadb.Collection] = None
-audit_log_collection: Optional[chromadb.Collection] = None
 
 def load_config() -> Dict[str, Any]:
     """Load configuration from config.yaml with environment variable substitution"""
     try:
         with open("config.yaml", "r") as file:
             config_content = file.read()
-            
+
         # Replace environment variables
         import re
         def replace_env_var(match):
             env_var = match.group(1)
             return os.getenv(env_var, f"${{{env_var}}}")  # Keep original if not found
-        
+
         config_content = re.sub(r'\$\{([^}]+)\}', replace_env_var, config_content)
         return yaml.safe_load(config_content)
     except Exception as e:
         print(f"Error loading config: {e}")
         return {}
 
+def initialize_llm_clients():
+    """Initialize LLM clients based on available API keys and configuration"""
+    global openai_client, gemini_model, llm_provider
+
+    openai_key = os.environ.get('OPENAI_API_KEY')
+    gemini_key = os.environ.get('GEMINI_API_KEY')
+
+    # Try to initialize OpenAI client
+    if openai_key and openai_key != "${OPENAI_API_KEY}" and OPENAI_AVAILABLE:
+        try:
+            print(f"DEBUG: Attempting to initialize OpenAI client...")
+            print(f"DEBUG: OpenAI available: {OPENAI_AVAILABLE}")
+            print(f"DEBUG: API key present: {bool(openai_key)}")
+            print(f"DEBUG: API key starts with: {openai_key[:10]}..." if openai_key else "No key")
+            print(f"DEBUG: OpenAI version: {openai.__version__}")
+
+            # Initialize OpenAI client with minimal configuration
+            openai_client = openai.OpenAI(api_key=openai_key)
+            llm_provider = "openai"
+            print("OpenAI client initialized successfully")
+        except Exception as e:
+            print(f"Failed to initialize OpenAI client: {e}")
+            print(f"DEBUG: Exception type: {type(e)}")
+            print(f"DEBUG: Exception args: {e.args}")
+            import traceback
+            print(f"DEBUG: Full traceback:")
+            traceback.print_exc()
+            openai_client = None
+
+    # Try to initialize Gemini client
+    if gemini_key and gemini_key != "${GEMINI_API_KEY}" and GOOGLE_AI_AVAILABLE:
+        try:
+            genai.configure(api_key=gemini_key)
+            gemini_model = genai.GenerativeModel('gemini-pro')
+            if llm_provider is None:  # Only set if OpenAI wasn't successful
+                llm_provider = "gemini"
+            print("Gemini client initialized successfully")
+        except Exception as e:
+            print(f"Failed to initialize Gemini client: {e}")
+            gemini_model = None
+
+    if llm_provider is None:
+        print("No LLM clients initialized. Set OPENAI_API_KEY or GEMINI_API_KEY environment variable.")
+
+def generate_embedding(text: str) -> Optional[List[float]]:
+    """Generate embedding for text using available LLM service"""
+    if not text.strip():
+        return None
+
+    try:
+        if llm_provider == "openai" and openai_client:
+            response = openai_client.embeddings.create(
+                model="text-embedding-ada-002",
+                input=text
+            )
+            return response.data[0].embedding
+        elif llm_provider == "gemini" and gemini_model:
+            # Note: Gemini doesn't have a direct embedding API yet
+            # For now, fall back to hash-based embeddings
+            return generate_hash_embedding(text)
+        else:
+            # Fall back to hash-based embeddings
+            return generate_hash_embedding(text)
+    except Exception as e:
+        print(f"Error generating embedding: {e}")
+        return generate_hash_embedding(text)
+
+def generate_hash_embedding(text: str) -> List[float]:
+    """Generate hash-based embedding as fallback"""
+    hash_obj = hashlib.md5(text.encode())
+    hash_bytes = hash_obj.digest()
+
+    # Convert to 384-dimensional embedding
+    embedding = []
+    for i in range(384):
+        byte_index = i % len(hash_bytes)
+        embedding.append((hash_bytes[byte_index] / 255.0) * 2.0 - 1.0)
+
+    return embedding
+
 def validate_llm_connection() -> bool:
     """Validate external LLM API connectivity"""
     try:
-        provider = config.get("llm", {}).get("provider", "openai")
-        
-        if provider == "openai":
-            api_key = config.get("llm", {}).get("openai", {}).get("api_key", "")
-            if not api_key or api_key.startswith("${"):
-                return False
-            # For now, just check if API key is provided
-            # Actual connection test will be implemented in Phase 4
-            return True
-            
-        elif provider == "gemini":
-            api_key = config.get("llm", {}).get("gemini", {}).get("api_key", "")
-            if not api_key or api_key.startswith("${"):
-                return False
-            return True
-            
-        return False
+        # Check if any LLM client is initialized
+        return llm_provider is not None and (openai_client is not None or gemini_model is not None)
     except Exception as e:
         print(f"LLM connection validation error: {e}")
         return False
@@ -143,23 +203,13 @@ def add_test_document(item_name: str, bin_id: str, description: str = "") -> boo
         if inventory_collection is None:
             return False
 
-        # Generate a simple embedding (placeholder - will be replaced with LLM in Phase 4)
-        # For now, use a simple hash-based approach for testing
-        import hashlib
+        # Generate embedding using LLM or fallback to hash
         text_to_embed = f"{item_name} {description}".strip()
-        hash_obj = hashlib.md5(text_to_embed.encode())
-        # Create a simple 384-dimensional embedding from hash
-        hash_hex = hash_obj.hexdigest()
-        embedding = []
-        for i in range(0, len(hash_hex), 2):
-            # Convert hex pairs to normalized floats
-            val = int(hash_hex[i:i+2], 16) / 255.0 - 0.5  # Normalize to [-0.5, 0.5]
-            embedding.append(val)
+        embedding = generate_embedding(text_to_embed)
 
-        # Pad or truncate to 384 dimensions (common embedding size)
-        while len(embedding) < 384:
-            embedding.extend(embedding[:min(len(embedding), 384 - len(embedding))])
-        embedding = embedding[:384]
+        if embedding is None:
+            print(f"Failed to generate embedding for: {item_name}")
+            return False
 
         # Generate unique ID
         item_id = str(uuid.uuid4())
@@ -174,7 +224,7 @@ def add_test_document(item_name: str, bin_id: str, description: str = "") -> boo
                 "name": item_name,
                 "description": description,
                 "bin_id": bin_id,
-                "embedding_model_version": "test-hash-v1",
+                "embedding_model_version": llm_provider if llm_provider else "hash-fallback-v1",
                 "created_at": datetime.now().isoformat(),
                 "updated_at": datetime.now().isoformat()
             }]
@@ -230,6 +280,9 @@ async def lifespan(app: FastAPI):
     # Initialize ChromaDB
     if not initialize_chromadb():
         print("Warning: ChromaDB initialization failed")
+
+    # Initialize LLM clients
+    initialize_llm_clients()
 
     yield
 
