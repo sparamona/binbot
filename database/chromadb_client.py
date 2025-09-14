@@ -39,6 +39,36 @@ class ChromaDBClient:
             try:
                 self.inventory_collection = self.client.get_collection(name=collection_name)
                 print(f"Found existing inventory collection: {collection_name}")
+
+                # Check if collection has correct embedding dimension
+                # Test with a dummy embedding to see if dimensions match
+                try:
+                    test_embedding = [0.0] * 1536  # OpenAI embedding size
+                    # Try to add a test document to check dimensions
+                    self.inventory_collection.add(
+                        documents=["dimension_test"],
+                        embeddings=[test_embedding],
+                        ids=["test_dimension_check"]
+                    )
+                    # If successful, remove the test document
+                    self.inventory_collection.delete(ids=["test_dimension_check"])
+                except Exception as dim_error:
+                    if "dimension" in str(dim_error).lower():
+                        print(f"Collection has wrong embedding dimension, recreating: {dim_error}")
+                        # Delete and recreate collection with correct dimensions
+                        self.client.delete_collection(collection_name)
+                        self.inventory_collection = self.client.create_collection(
+                            name=collection_name,
+                            metadata={
+                                "description": "BinBot inventory items",
+                                "embedding_model_version": self.config.get("llm", {}).get("openai", {}).get("embedding_model", "text-embedding-ada-002"),
+                                "created_at": datetime.now().isoformat()
+                            }
+                        )
+                        print(f"Recreated inventory collection with correct dimensions: {collection_name}")
+                    else:
+                        raise dim_error
+
             except Exception:
                 # Collection doesn't exist, create it
                 self.inventory_collection = self.client.create_collection(
@@ -144,6 +174,33 @@ class ChromaDBClient:
 
         except Exception as e:
             print(f"Error adding document: {e}")
+            return False
+
+    def add_audit_log_entry(self, audit_entry: Dict[str, Any]) -> bool:
+        """Add an audit log entry"""
+        try:
+            if self.audit_log_collection is None:
+                print("Audit log collection not initialized")
+                return False
+
+            doc_id = audit_entry.get("operation_id", str(uuid.uuid4()))
+            document_text = audit_entry.get("description", "Audit log entry")
+
+            # Create a simple embedding for audit log (just zeros)
+            embedding = [0.0] * 1536  # Standard OpenAI embedding size
+
+            self.audit_log_collection.add(
+                documents=[document_text],
+                metadatas=[audit_entry],
+                embeddings=[embedding],
+                ids=[doc_id]
+            )
+
+            print(f"Added audit log entry: {audit_entry.get('action', 'unknown')}")
+            return True
+
+        except Exception as e:
+            print(f"Error adding audit log entry: {e}")
             return False
     
     def search_documents(self, query: str, limit: int = 10, offset: int = 0) -> Dict[str, Any]:

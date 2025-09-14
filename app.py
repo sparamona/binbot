@@ -8,7 +8,7 @@ from config.settings import Settings
 from database.chromadb_client import ChromaDBClient
 from llm.client import LLMClient
 from llm.embeddings import EmbeddingService
-from api import health, search, test
+from api import health, search, test, add
 from api_schemas import StandardResponse, ErrorDetail
 
 # Global instances
@@ -40,6 +40,7 @@ async def lifespan(app: FastAPI):
     health.set_dependencies(db_client, llm_client, startup_time)
     search.set_dependencies(db_client)
     test.set_dependencies(db_client, embedding_service)
+    add.set_dependencies(db_client, embedding_service)
 
     yield
 
@@ -61,6 +62,7 @@ app.mount("/static", StaticFiles(directory="frontend"), name="static")
 app.include_router(health.router)
 app.include_router(search.router)
 app.include_router(test.router)
+app.include_router(add.router)
 
 @app.get("/test")
 async def test_page():

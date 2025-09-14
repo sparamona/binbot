@@ -136,6 +136,21 @@
     </div>
 
     <div class="grid">
+        <!-- Add Items Section -->
+        <div class="section">
+            <h2>➕ Add Items</h2>
+            <div class="form-group">
+                <label for="add-items">Items (one per line):</label>
+                <textarea id="add-items" rows="4" placeholder="Arduino Uno&#10;LED strip&#10;Screwdriver set"></textarea>
+            </div>
+            <div class="form-group">
+                <label for="add-bin-id">Bin ID:</label>
+                <input type="text" id="add-bin-id" placeholder="e.g., 1, 2, A1, etc.">
+            </div>
+            <button class="btn btn-success" onclick="addItems()">Add Items</button>
+            <div id="add-result" class="result"></div>
+        </div>
+
         <!-- Test Data Section -->
         <div class="section">
             <h2>🧪 Test Data Management</h2>
@@ -174,6 +189,7 @@
         <button class="btn" onclick="quickTest('search-arduino')">Search "Arduino"</button>
         <button class="btn" onclick="quickTest('search-led')">Search "LED"</button>
         <button class="btn" onclick="quickTest('list-items')">List Items</button>
+        <button class="btn" onclick="quickTest('add-test-item')">Add Test Item</button>
         <button class="btn btn-success" onclick="quickTest('add-sample')">Add Sample Data</button>
         <div id="quick-result" class="result"></div>
     </div>
@@ -292,6 +308,79 @@
                 }
             } catch (error) {
                 document.getElementById('search-result').innerHTML = `<div class="status-error">❌ Connection Error</div><pre>Error: ${error.message}</pre>`;
+            }
+        }
+
+        // Add Items
+        async function addItems() {
+            const itemsText = document.getElementById('add-items').value;
+            const binId = document.getElementById('add-bin-id').value;
+
+            if (!itemsText.trim()) {
+                alert('Please enter at least one item');
+                return;
+            }
+
+            if (!binId.trim()) {
+                alert('Please enter a bin ID');
+                return;
+            }
+
+            // Parse items from textarea (one per line)
+            const items = itemsText.split('\n')
+                .map(item => item.trim())
+                .filter(item => item.length > 0);
+
+            if (items.length === 0) {
+                alert('Please enter at least one valid item');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/add`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        items: items,
+                        bin_id: binId
+                    })
+                });
+
+                const data = await response.json();
+                const resultDiv = document.getElementById('add-result');
+
+                if (data.success) {
+                    let html = `<div class="status-healthy">✅ Items Added Successfully</div>`;
+                    html += `<p><strong>Items Added:</strong> ${data.data.items_added}</p>`;
+                    html += `<p><strong>Items Failed:</strong> ${data.data.items_failed}</p>`;
+                    html += `<p><strong>Bin ID:</strong> ${binId}</p>`;
+
+                    if (data.data.failed_items && data.data.failed_items.length > 0) {
+                        html += `<div style="margin-top: 10px;"><strong>Failed Items:</strong></div>`;
+                        data.data.failed_items.forEach(item => {
+                            html += `<div style="color: red;">• ${item.name}: ${item.error}</div>`;
+                        });
+                    }
+
+                    html += `<details style="margin-top: 15px;">
+                        <summary>Raw Response</summary>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    </details>`;
+
+                    resultDiv.innerHTML = html;
+
+                    // Clear form on success
+                    if (data.data.items_added > 0) {
+                        document.getElementById('add-items').value = '';
+                        document.getElementById('add-bin-id').value = '';
+                    }
+                } else {
+                    resultDiv.innerHTML = `<div class="status-error">❌ Failed to Add Items</div><pre>${formatResponse(data)}</pre>`;
+                }
+            } catch (error) {
+                document.getElementById('add-result').innerHTML = `<div class="status-error">❌ Connection Error</div><pre>Error: ${error.message}</pre>`;
             }
         }
 
@@ -440,6 +529,19 @@
                         response = await fetch(`${API_BASE}/test/list-items`);
                         data = await response.json();
                         resultDiv.innerHTML = `<div><strong>List Items:</strong></div><pre>${formatResponse(data, false)}</pre>`;
+                        break;
+
+                    case 'add-test-item':
+                        response = await fetch(`${API_BASE}/add`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                items: ['Test Item ' + Date.now()],
+                                bin_id: 'TEST'
+                            })
+                        });
+                        data = await response.json();
+                        resultDiv.innerHTML = `<div><strong>Add Test Item:</strong></div><pre>${formatResponse(data, false)}</pre>`;
                         break;
 
                     case 'add-sample':
