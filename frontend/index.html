@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BinBot - Inventory Management</title>
+</head>
+<body>
+    <h1>BinBot Inventory System</h1>
+    
+    <!-- Health Check Section -->
+    <div id="health-section">
+        <h2>System Status</h2>
+        <button onclick="checkHealth()">Check Health</button>
+        <div id="health-result"></div>
+    </div>
+
+    <!-- Basic Input Section -->
+    <div id="input-section">
+        <h2>Query</h2>
+        <input type="text" id="query-input" placeholder="Enter your query here">
+        <button onclick="submitQuery()">Submit</button>
+        <div id="query-result"></div>
+    </div>
+
+    <script>
+        const API_BASE = '';  // Same origin
+
+        async function checkHealth() {
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                const data = await response.json();
+                
+                const resultDiv = document.getElementById('health-result');
+                if (data.success) {
+                    resultDiv.innerHTML = `
+                        <p>Status: ${data.data.status}</p>
+                        <p>Database: ${data.data.database_connected ? 'Connected' : 'Disconnected'}</p>
+                        <p>LLM: ${data.data.llm_connected ? 'Connected' : 'Disconnected'}</p>
+                        <p>Version: ${data.data.version}</p>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `<p>Error: ${data.error.message}</p>`;
+                }
+            } catch (error) {
+                document.getElementById('health-result').innerHTML = `<p>Connection Error: ${error.message}</p>`;
+            }
+        }
+
+        async function submitQuery() {
+            const query = document.getElementById('query-input').value;
+            if (!query.trim()) {
+                alert('Please enter a query');
+                return;
+            }
+
+            try {
+                // For now, just echo the query back
+                const resultDiv = document.getElementById('query-result');
+                resultDiv.innerHTML = `<p>Query received: "${query}"</p>`;
+                
+                // Clear input
+                document.getElementById('query-input').value = '';
+            } catch (error) {
+                document.getElementById('query-result').innerHTML = `<p>Error: ${error.message}</p>`;
+            }
+        }
+
+        // Allow Enter key to submit query
+        document.getElementById('query-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                submitQuery();
+            }
+        });
+    </script>
+</body>
+</html>
