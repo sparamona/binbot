@@ -4,129 +4,474 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BinBot - Inventory Management</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .section {
+            background: white;
+            margin: 20px 0;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .section h2 {
+            color: #333;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 10px;
+        }
+        .form-group {
+            margin: 15px 0;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .btn {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .btn:hover {
+            background-color: #0056b3;
+        }
+        .btn-success {
+            background-color: #28a745;
+        }
+        .btn-success:hover {
+            background-color: #1e7e34;
+        }
+        .btn-warning {
+            background-color: #ffc107;
+            color: #212529;
+        }
+        .btn-warning:hover {
+            background-color: #e0a800;
+        }
+        .result {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 4px;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .status-healthy {
+            color: #28a745;
+            font-weight: bold;
+        }
+        .status-degraded {
+            color: #ffc107;
+            font-weight: bold;
+        }
+        .status-error {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
 </head>
 <body>
-    <h1>BinBot Inventory System</h1>
+    <h1>🤖 BinBot Inventory System - API Testing Interface</h1>
+    <p><em>Test all available endpoints using the forms below</em></p>
     
-    <!-- Health Check Section -->
-    <div id="health-section">
-        <h2>System Status</h2>
-        <button onclick="checkHealth()">Check Health</button>
-        <div id="health-result"></div>
+    <div class="grid">
+        <!-- Health Check Section -->
+        <div class="section">
+            <h2>🏥 System Health</h2>
+            <button class="btn" onclick="checkHealth()">Check System Health</button>
+            <div id="health-result" class="result"></div>
+        </div>
+
+        <!-- Search Section -->
+        <div class="section">
+            <h2>🔍 Search Inventory</h2>
+            <div class="form-group">
+                <label for="search-input">Search Query:</label>
+                <input type="text" id="search-input" placeholder="e.g., arduino, screwdriver, LED">
+            </div>
+            <div class="form-group">
+                <label for="search-limit">Results Limit:</label>
+                <select id="search-limit">
+                    <option value="10">10</option>
+                    <option value="20" selected>20</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="search-offset">Offset (for pagination):</label>
+                <input type="number" id="search-offset" value="0" min="0">
+            </div>
+            <button class="btn" onclick="searchInventory()">Search Items</button>
+            <div id="search-result" class="result"></div>
+        </div>
     </div>
 
-    <!-- Search Section -->
-    <div id="search-section">
-        <h2>Search Inventory</h2>
-        <input type="text" id="search-input" placeholder="Search for items...">
-        <button onclick="searchInventory()">Search</button>
-        <div id="search-result"></div>
+    <div class="grid">
+        <!-- Test Data Section -->
+        <div class="section">
+            <h2>🧪 Test Data Management</h2>
+            <button class="btn btn-success" onclick="addSampleData()">Add Sample Data</button>
+            <button class="btn btn-warning" onclick="listAllItems()">List All Items</button>
+            <div id="test-result" class="result"></div>
+        </div>
+
+        <!-- Raw API Testing Section -->
+        <div class="section">
+            <h2>🔧 Raw API Testing</h2>
+            <div class="form-group">
+                <label for="api-method">HTTP Method:</label>
+                <select id="api-method">
+                    <option value="GET">GET</option>
+                    <option value="POST">POST</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="api-endpoint">Endpoint:</label>
+                <input type="text" id="api-endpoint" placeholder="e.g., /health, /search?q=test">
+            </div>
+            <div class="form-group">
+                <label for="api-body">Request Body (JSON, for POST):</label>
+                <textarea id="api-body" rows="3" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;" placeholder='{"key": "value"}'></textarea>
+            </div>
+            <button class="btn" onclick="testRawAPI()">Send Request</button>
+            <div id="api-result" class="result"></div>
+        </div>
     </div>
 
-    <!-- Basic Input Section -->
-    <div id="input-section">
-        <h2>Query (Future Feature)</h2>
-        <input type="text" id="query-input" placeholder="Enter your query here">
-        <button onclick="submitQuery()">Submit</button>
-        <div id="query-result"></div>
+    <!-- Quick Actions Section -->
+    <div class="section">
+        <h2>⚡ Quick Actions</h2>
+        <button class="btn" onclick="quickTest('health')">Health Check</button>
+        <button class="btn" onclick="quickTest('search-arduino')">Search "Arduino"</button>
+        <button class="btn" onclick="quickTest('search-led')">Search "LED"</button>
+        <button class="btn" onclick="quickTest('list-items')">List Items</button>
+        <button class="btn btn-success" onclick="quickTest('add-sample')">Add Sample Data</button>
+        <div id="quick-result" class="result"></div>
     </div>
 
     <script>
         const API_BASE = '';  // Same origin
 
+        // Utility function to format JSON response
+        function formatResponse(data, includeRaw = true) {
+            let formatted = '';
+
+            if (data.success) {
+                formatted += `✅ SUCCESS\n\n`;
+                if (data.data) {
+                    formatted += `Data:\n${JSON.stringify(data.data, null, 2)}\n`;
+                }
+            } else {
+                formatted += `❌ ERROR\n\n`;
+                if (data.error) {
+                    formatted += `Error: ${data.error.message}\n`;
+                    if (data.error.details) {
+                        formatted += `Details: ${JSON.stringify(data.error.details, null, 2)}\n`;
+                    }
+                }
+            }
+
+            if (includeRaw) {
+                formatted += `\n--- Raw Response ---\n${JSON.stringify(data, null, 2)}`;
+            }
+
+            return formatted;
+        }
+
+        // Health Check
         async function checkHealth() {
             try {
                 const response = await fetch(`${API_BASE}/health`);
                 const data = await response.json();
-                
+
                 const resultDiv = document.getElementById('health-result');
+
                 if (data.success) {
+                    const status = data.data.status;
+                    const statusClass = status === 'healthy' ? 'status-healthy' :
+                                      status === 'degraded' ? 'status-degraded' : 'status-error';
+
                     resultDiv.innerHTML = `
-                        <p>Status: ${data.data.status}</p>
-                        <p>Database: ${data.data.database_connected ? 'Connected' : 'Disconnected'}</p>
-                        <p>LLM: ${data.data.llm_connected ? 'Connected' : 'Disconnected'}</p>
-                        <p>Version: ${data.data.version}</p>
+                        <div class="${statusClass}">Status: ${status.toUpperCase()}</div>
+                        <p><strong>Database:</strong> ${data.data.database_connected ? '✅ Connected' : '❌ Disconnected'}</p>
+                        <p><strong>LLM:</strong> ${data.data.llm_connected ? '✅ Connected' : '❌ Disconnected'}</p>
+                        <p><strong>Version:</strong> ${data.data.version}</p>
+                        <p><strong>Uptime:</strong> ${Math.round(data.data.uptime_seconds)}s</p>
+                        <p><strong>Inventory Items:</strong> ${data.data.collections.inventory_count}</p>
+                        <p><strong>Audit Logs:</strong> ${data.data.collections.audit_log_count}</p>
+                        <details>
+                            <summary>Raw Response</summary>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </details>
                     `;
                 } else {
-                    resultDiv.innerHTML = `<p>Error: ${data.error.message}</p>`;
+                    resultDiv.innerHTML = `<div class="status-error">❌ Health Check Failed</div><pre>${formatResponse(data)}</pre>`;
                 }
             } catch (error) {
-                document.getElementById('health-result').innerHTML = `<p>Connection Error: ${error.message}</p>`;
+                document.getElementById('health-result').innerHTML = `<div class="status-error">❌ Connection Error</div><pre>Error: ${error.message}</pre>`;
             }
         }
 
+        // Search Inventory
         async function searchInventory() {
             const query = document.getElementById('search-input').value;
+            const limit = document.getElementById('search-limit').value;
+            const offset = document.getElementById('search-offset').value;
+
             if (!query.trim()) {
                 alert('Please enter a search term');
                 return;
             }
 
             try {
-                const response = await fetch(`${API_BASE}/search?q=${encodeURIComponent(query)}&limit=20`);
+                const url = `${API_BASE}/search?q=${encodeURIComponent(query)}&limit=${limit}&offset=${offset}`;
+                const response = await fetch(url);
                 const data = await response.json();
 
                 const resultDiv = document.getElementById('search-result');
+
                 if (data.success) {
                     if (data.data.total_results === 0) {
-                        resultDiv.innerHTML = `<p>No items found for "${query}"</p>`;
+                        resultDiv.innerHTML = `<div>No items found for "${query}"</div>`;
                     } else {
-                        let html = `<h3>Found ${data.data.total_results} items:</h3><ul>`;
-                        data.data.results.forEach(item => {
+                        let html = `<div><strong>Found ${data.data.total_results} items (showing ${data.data.results.length}):</strong></div><br>`;
+
+                        data.data.results.forEach((item, index) => {
                             html += `
-                                <li>
-                                    <strong>${item.name}</strong> (Bin: ${item.bin_id})<br>
-                                    <em>${item.description}</em>
-                                </li>
+                                <div style="border: 1px solid #ddd; padding: 10px; margin: 5px 0; border-radius: 4px;">
+                                    <strong>${item.name}</strong>
+                                    <span style="background: #007bff; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.8em;">Bin ${item.bin_id}</span>
+                                    <br><em>${item.description}</em>
+                                    <br><small>Score: ${item.relevance_score} | Created: ${new Date(item.created_at).toLocaleString()}</small>
+                                </div>
                             `;
                         });
-                        html += '</ul>';
 
                         if (data.data.pagination.has_more) {
-                            html += `<p><em>Showing first ${data.data.results.length} results...</em></p>`;
+                            html += `<div style="margin-top: 10px;"><em>More results available. Increase offset to see more.</em></div>`;
                         }
+
+                        html += `<details style="margin-top: 15px;">
+                            <summary>Raw Response</summary>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </details>`;
 
                         resultDiv.innerHTML = html;
                     }
                 } else {
-                    resultDiv.innerHTML = `<p>Search Error: ${data.error.message}</p>`;
+                    resultDiv.innerHTML = `<div class="status-error">❌ Search Error</div><pre>${formatResponse(data)}</pre>`;
                 }
             } catch (error) {
-                document.getElementById('search-result').innerHTML = `<p>Connection Error: ${error.message}</p>`;
+                document.getElementById('search-result').innerHTML = `<div class="status-error">❌ Connection Error</div><pre>Error: ${error.message}</pre>`;
             }
         }
 
-        async function submitQuery() {
-            const query = document.getElementById('query-input').value;
-            if (!query.trim()) {
-                alert('Please enter a query');
+        // Add Sample Data
+        async function addSampleData() {
+            try {
+                const response = await fetch(`${API_BASE}/test/add-sample-data`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+
+                const resultDiv = document.getElementById('test-result');
+
+                if (data.success) {
+                    resultDiv.innerHTML = `
+                        <div class="status-healthy">✅ Sample Data Added Successfully</div>
+                        <p><strong>Items Added:</strong> ${data.data.items_added}</p>
+                        <p><strong>Message:</strong> ${data.data.message}</p>
+                        <details>
+                            <summary>Raw Response</summary>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </details>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `<div class="status-error">❌ Failed to Add Sample Data</div><pre>${formatResponse(data)}</pre>`;
+                }
+            } catch (error) {
+                document.getElementById('test-result').innerHTML = `<div class="status-error">❌ Connection Error</div><pre>Error: ${error.message}</pre>`;
+            }
+        }
+
+        // List All Items
+        async function listAllItems() {
+            try {
+                const response = await fetch(`${API_BASE}/test/list-items`);
+                const data = await response.json();
+
+                const resultDiv = document.getElementById('test-result');
+
+                if (data.success) {
+                    let html = `<div class="status-healthy">✅ Items Retrieved Successfully</div>`;
+                    html += `<p><strong>Total Items:</strong> ${data.data.total_items}</p>`;
+
+                    if (data.data.items && data.data.items.length > 0) {
+                        html += `<div style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; margin: 10px 0;">`;
+                        data.data.items.forEach((item, index) => {
+                            html += `
+                                <div style="border-bottom: 1px solid #eee; padding: 8px 0;">
+                                    <strong>${index + 1}. ${item.name}</strong>
+                                    <span style="background: #28a745; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.8em;">Bin ${item.bin_id}</span>
+                                    <br><em>${item.description}</em>
+                                    <br><small>ID: ${item.id} | Created: ${new Date(item.created_at).toLocaleString()}</small>
+                                </div>
+                            `;
+                        });
+                        html += `</div>`;
+                    }
+
+                    html += `<details>
+                        <summary>Raw Response</summary>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    </details>`;
+
+                    resultDiv.innerHTML = html;
+                } else {
+                    resultDiv.innerHTML = `<div class="status-error">❌ Failed to List Items</div><pre>${formatResponse(data)}</pre>`;
+                }
+            } catch (error) {
+                document.getElementById('test-result').innerHTML = `<div class="status-error">❌ Connection Error</div><pre>Error: ${error.message}</pre>`;
+            }
+        }
+
+        // Raw API Testing
+        async function testRawAPI() {
+            const method = document.getElementById('api-method').value;
+            const endpoint = document.getElementById('api-endpoint').value;
+            const body = document.getElementById('api-body').value;
+
+            if (!endpoint.trim()) {
+                alert('Please enter an endpoint');
                 return;
             }
 
             try {
-                // For now, just echo the query back
-                const resultDiv = document.getElementById('query-result');
-                resultDiv.innerHTML = `<p>Query received: "${query}"</p>`;
-                
-                // Clear input
-                document.getElementById('query-input').value = '';
+                const options = {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                };
+
+                if (method === 'POST' && body.trim()) {
+                    try {
+                        options.body = JSON.stringify(JSON.parse(body));
+                    } catch (e) {
+                        alert('Invalid JSON in request body');
+                        return;
+                    }
+                }
+
+                const url = endpoint.startsWith('/') ? `${API_BASE}${endpoint}` : endpoint;
+                const response = await fetch(url, options);
+                const data = await response.json();
+
+                const resultDiv = document.getElementById('api-result');
+                resultDiv.innerHTML = `
+                    <div><strong>Request:</strong> ${method} ${url}</div>
+                    ${body.trim() ? `<div><strong>Body:</strong> ${body}</div>` : ''}
+                    <div><strong>Status:</strong> ${response.status} ${response.statusText}</div>
+                    <br>
+                    <div><strong>Response:</strong></div>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
             } catch (error) {
-                document.getElementById('query-result').innerHTML = `<p>Error: ${error.message}</p>`;
+                document.getElementById('api-result').innerHTML = `<div class="status-error">❌ Request Error</div><pre>Error: ${error.message}</pre>`;
             }
         }
 
-        // Allow Enter key to submit search
+        // Quick Actions
+        async function quickTest(action) {
+            const resultDiv = document.getElementById('quick-result');
+
+            try {
+                let response, data;
+
+                switch (action) {
+                    case 'health':
+                        response = await fetch(`${API_BASE}/health`);
+                        data = await response.json();
+                        resultDiv.innerHTML = `<div><strong>Health Check:</strong></div><pre>${formatResponse(data, false)}</pre>`;
+                        break;
+
+                    case 'search-arduino':
+                        response = await fetch(`${API_BASE}/search?q=arduino&limit=5`);
+                        data = await response.json();
+                        resultDiv.innerHTML = `<div><strong>Search "Arduino":</strong></div><pre>${formatResponse(data, false)}</pre>`;
+                        break;
+
+                    case 'search-led':
+                        response = await fetch(`${API_BASE}/search?q=led&limit=5`);
+                        data = await response.json();
+                        resultDiv.innerHTML = `<div><strong>Search "LED":</strong></div><pre>${formatResponse(data, false)}</pre>`;
+                        break;
+
+                    case 'list-items':
+                        response = await fetch(`${API_BASE}/test/list-items`);
+                        data = await response.json();
+                        resultDiv.innerHTML = `<div><strong>List Items:</strong></div><pre>${formatResponse(data, false)}</pre>`;
+                        break;
+
+                    case 'add-sample':
+                        response = await fetch(`${API_BASE}/test/add-sample-data`, { method: 'POST' });
+                        data = await response.json();
+                        resultDiv.innerHTML = `<div><strong>Add Sample Data:</strong></div><pre>${formatResponse(data, false)}</pre>`;
+                        break;
+
+                    default:
+                        resultDiv.innerHTML = `<div class="status-error">❌ Unknown action: ${action}</div>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="status-error">❌ Quick Test Error</div><pre>Error: ${error.message}</pre>`;
+            }
+        }
+
+        // Event Listeners
         document.getElementById('search-input').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
                 searchInventory();
             }
         });
 
-        // Allow Enter key to submit query
-        document.getElementById('query-input').addEventListener('keypress', function(e) {
+        document.getElementById('api-endpoint').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
-                submitQuery();
+                testRawAPI();
             }
+        });
+
+        // Auto-load health check on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            checkHealth();
         });
     </script>
 </body>

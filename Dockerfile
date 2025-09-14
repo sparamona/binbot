@@ -22,6 +22,12 @@ COPY api_schemas.py .
 COPY frontend/ ./frontend/
 COPY start.sh .
 
+# Copy modular code structure
+COPY config/ ./config/
+COPY database/ ./database/
+COPY llm/ ./llm/
+COPY api/ ./api/
+
 # Make start script executable
 RUN chmod +x start.sh
 
