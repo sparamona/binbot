@@ -151,6 +151,23 @@
             <div id="add-result" class="result"></div>
         </div>
 
+        <!-- Remove Items Section -->
+        <div class="section">
+            <h2>🗑️ Remove Items</h2>
+            <div class="form-group">
+                <label for="remove-query">Search for items to remove:</label>
+                <input type="text" id="remove-query" placeholder="e.g., multimeter, arduino, screwdriver">
+            </div>
+            <button class="btn btn-danger" onclick="removeItems()">Find & Remove Items</button>
+            <div id="remove-result" class="result"></div>
+            <div id="disambiguation-section" style="display: none;">
+                <h3>Multiple items found - Select which to remove:</h3>
+                <div id="disambiguation-items"></div>
+                <button class="btn btn-danger" onclick="confirmRemoval()">Remove Selected Items</button>
+                <button class="btn btn-secondary" onclick="cancelRemoval()">Cancel</button>
+            </div>
+        </div>
+
         <!-- Test Data Section -->
         <div class="section">
             <h2>🧪 Test Data Management</h2>
@@ -382,6 +399,131 @@
             } catch (error) {
                 document.getElementById('add-result').innerHTML = `<div class="status-error">❌ Connection Error</div><pre>Error: ${error.message}</pre>`;
             }
+        }
+
+        // Remove Items
+        let currentDisambiguationData = null;
+
+        async function removeItems() {
+            const query = document.getElementById('remove-query').value;
+
+            if (!query.trim()) {
+                document.getElementById('remove-result').innerHTML = '<div class="status-error">❌ Please enter a search query</div>';
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/remove`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        query: query
+                    })
+                });
+                const data = await response.json();
+
+                const resultDiv = document.getElementById('remove-result');
+                const disambiguationSection = document.getElementById('disambiguation-section');
+
+                if (data.success) {
+                    resultDiv.innerHTML = `
+                        <div class="status-healthy">✅ Items Removed Successfully</div>
+                        <p><strong>Items Removed:</strong> ${data.data.items_removed}</p>
+                        <p><strong>Transaction ID:</strong> ${data.data.bulk_transaction_id}</p>
+                        <details>
+                            <summary>Removed Items</summary>
+                            <pre>${JSON.stringify(data.data.removed_items, null, 2)}</pre>
+                        </details>
+                    `;
+                    disambiguationSection.style.display = 'none';
+                    document.getElementById('remove-query').value = '';
+                } else if (data.error && data.error.code === 'DISAMBIGUATION_REQUIRED') {
+                    // Show disambiguation options
+                    currentDisambiguationData = data.disambiguation;
+                    showDisambiguationOptions(data.disambiguation);
+                    resultDiv.innerHTML = `<div class="status-warning">⚠️ ${data.error.message}</div>`;
+                } else {
+                    resultDiv.innerHTML = `<div class="status-error">❌ Failed to Remove Items</div><pre>${formatResponse(data)}</pre>`;
+                    disambiguationSection.style.display = 'none';
+                }
+            } catch (error) {
+                document.getElementById('remove-result').innerHTML = `<div class="status-error">❌ Connection Error</div><pre>Error: ${error.message}</pre>`;
+            }
+        }
+
+        function showDisambiguationOptions(disambiguation) {
+            const itemsDiv = document.getElementById('disambiguation-items');
+            const section = document.getElementById('disambiguation-section');
+
+            let html = '';
+            disambiguation.matches.forEach((item, index) => {
+                html += `
+                    <div style="margin: 10px 0; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                        <label>
+                            <input type="checkbox" value="${item.id}" class="disambiguation-checkbox">
+                            <strong>${item.name}</strong> (Bin: ${item.bin_id})
+                            <br><small>${item.description}</small>
+                            <br><small>Relevance: ${(item.relevance_score * 100).toFixed(1)}%</small>
+                        </label>
+                    </div>
+                `;
+            });
+
+            itemsDiv.innerHTML = html;
+            section.style.display = 'block';
+        }
+
+        async function confirmRemoval() {
+            const checkboxes = document.querySelectorAll('.disambiguation-checkbox:checked');
+            const selectedIds = Array.from(checkboxes).map(cb => cb.value);
+
+            if (selectedIds.length === 0) {
+                alert('Please select at least one item to remove');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/remove`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        query: currentDisambiguationData.query,
+                        item_ids: selectedIds
+                    })
+                });
+                const data = await response.json();
+
+                const resultDiv = document.getElementById('remove-result');
+                const disambiguationSection = document.getElementById('disambiguation-section');
+
+                if (data.success) {
+                    resultDiv.innerHTML = `
+                        <div class="status-healthy">✅ Items Removed Successfully</div>
+                        <p><strong>Items Removed:</strong> ${data.data.items_removed}</p>
+                        <p><strong>Transaction ID:</strong> ${data.data.bulk_transaction_id}</p>
+                        <details>
+                            <summary>Removed Items</summary>
+                            <pre>${JSON.stringify(data.data.removed_items, null, 2)}</pre>
+                        </details>
+                    `;
+                    disambiguationSection.style.display = 'none';
+                    document.getElementById('remove-query').value = '';
+                    currentDisambiguationData = null;
+                } else {
+                    resultDiv.innerHTML = `<div class="status-error">❌ Failed to Remove Items</div><pre>${formatResponse(data)}</pre>`;
+                }
+            } catch (error) {
+                document.getElementById('remove-result').innerHTML = `<div class="status-error">❌ Connection Error</div><pre>Error: ${error.message}</pre>`;
+            }
+        }
+
+        function cancelRemoval() {
+            document.getElementById('disambiguation-section').style.display = 'none';
+            currentDisambiguationData = null;
         }
 
         // Add Sample Data

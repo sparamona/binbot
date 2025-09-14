@@ -253,3 +253,19 @@ class ChromaDBClient:
         except Exception as e:
             print(f"Error searching documents: {e}")
             raise e
+
+    def remove_document(self, document_id: str) -> bool:
+        """Remove a document from the inventory collection"""
+        try:
+            if self.inventory_collection is None:
+                print("Inventory collection not initialized")
+                return False
+
+            # Remove the document by ID
+            self.inventory_collection.delete(ids=[document_id])
+            print(f"Successfully removed document: {document_id}")
+            return True
+
+        except Exception as e:
+            print(f"Error removing document {document_id}: {e}")
+            return False

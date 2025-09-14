@@ -35,8 +35,9 @@ class AddItemRequest(BaseModel):
 
 class RemoveItemRequest(BaseModel):
     query: str = Field(..., description="Description of item to remove")
-    bin_id: Optional[str] = None
-    confirmation_id: Optional[str] = None
+    item_ids: Optional[List[str]] = Field(None, description="Specific item IDs to remove (for disambiguation)")
+    confirm_all: bool = Field(False, description="Confirm removal of all matching items")
+    bulk_transaction_id: Optional[str] = None
 
 class MoveItemRequest(BaseModel):
     query: str = Field(..., description="Description of item to move")
