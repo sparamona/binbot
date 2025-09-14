@@ -424,6 +424,7 @@
 
         // Remove Items
         let currentDisambiguationData = null;
+        let currentRemoveQuery = null;
 
         async function removeItems() {
             const query = document.getElementById('remove-query').value;
@@ -463,6 +464,7 @@
                 } else if (data.error && data.error.code === 'DISAMBIGUATION_REQUIRED') {
                     // Show disambiguation options
                     currentDisambiguationData = data.disambiguation;
+                    currentRemoveQuery = query; // Store the original query
                     showDisambiguationOptions(data.disambiguation);
                     resultDiv.innerHTML = `<div class="status-warning">⚠️ ${data.error.message}</div>`;
                 } else {
@@ -479,14 +481,14 @@
             const section = document.getElementById('disambiguation-section');
 
             let html = '';
-            disambiguation.matches.forEach((item, index) => {
+            disambiguation.options.forEach((item, index) => {
                 html += `
                     <div style="margin: 10px 0; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
                         <label>
-                            <input type="checkbox" value="${item.id}" class="disambiguation-checkbox">
+                            <input type="checkbox" value="${item.item_id}" class="disambiguation-checkbox">
                             <strong>${item.name}</strong> (Bin: ${item.bin_id})
                             <br><small>${item.description}</small>
-                            <br><small>Relevance: ${(item.relevance_score * 100).toFixed(1)}%</small>
+                            <br><small>Confidence: ${(item.confidence_score * 100).toFixed(1)}%</small>
                         </label>
                     </div>
                 `;
@@ -512,7 +514,7 @@
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        query: currentDisambiguationData.query,
+                        query: currentRemoveQuery || document.getElementById('remove-query').value,
                         item_ids: selectedIds
                     })
                 });
