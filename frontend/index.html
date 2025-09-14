@@ -15,9 +15,17 @@
         <div id="health-result"></div>
     </div>
 
+    <!-- Search Section -->
+    <div id="search-section">
+        <h2>Search Inventory</h2>
+        <input type="text" id="search-input" placeholder="Search for items...">
+        <button onclick="searchInventory()">Search</button>
+        <div id="search-result"></div>
+    </div>
+
     <!-- Basic Input Section -->
     <div id="input-section">
-        <h2>Query</h2>
+        <h2>Query (Future Feature)</h2>
         <input type="text" id="query-input" placeholder="Enter your query here">
         <button onclick="submitQuery()">Submit</button>
         <div id="query-result"></div>
@@ -47,6 +55,47 @@
             }
         }
 
+        async function searchInventory() {
+            const query = document.getElementById('search-input').value;
+            if (!query.trim()) {
+                alert('Please enter a search term');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/search?q=${encodeURIComponent(query)}&limit=20`);
+                const data = await response.json();
+
+                const resultDiv = document.getElementById('search-result');
+                if (data.success) {
+                    if (data.data.total_results === 0) {
+                        resultDiv.innerHTML = `<p>No items found for "${query}"</p>`;
+                    } else {
+                        let html = `<h3>Found ${data.data.total_results} items:</h3><ul>`;
+                        data.data.results.forEach(item => {
+                            html += `
+                                <li>
+                                    <strong>${item.name}</strong> (Bin: ${item.bin_id})<br>
+                                    <em>${item.description}</em>
+                                </li>
+                            `;
+                        });
+                        html += '</ul>';
+
+                        if (data.data.pagination.has_more) {
+                            html += `<p><em>Showing first ${data.data.results.length} results...</em></p>`;
+                        }
+
+                        resultDiv.innerHTML = html;
+                    }
+                } else {
+                    resultDiv.innerHTML = `<p>Search Error: ${data.error.message}</p>`;
+                }
+            } catch (error) {
+                document.getElementById('search-result').innerHTML = `<p>Connection Error: ${error.message}</p>`;
+            }
+        }
+
         async function submitQuery() {
             const query = document.getElementById('query-input').value;
             if (!query.trim()) {
@@ -65,6 +114,13 @@
                 document.getElementById('query-result').innerHTML = `<p>Error: ${error.message}</p>`;
             }
         }
+
+        // Allow Enter key to submit search
+        document.getElementById('search-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                searchInventory();
+            }
+        });
 
         // Allow Enter key to submit query
         document.getElementById('query-input').addEventListener('keypress', function(e) {
