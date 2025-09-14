@@ -168,6 +168,27 @@
             </div>
         </div>
 
+        <!-- Move Items Section -->
+        <div class="section">
+            <h2>📦 Move Items</h2>
+            <div class="form-group">
+                <label for="move-query">Search for items to move:</label>
+                <input type="text" id="move-query" placeholder="e.g., multimeter, arduino, screwdriver">
+            </div>
+            <div class="form-group">
+                <label for="move-target-bin">Target bin ID:</label>
+                <input type="text" id="move-target-bin" placeholder="e.g., 5, A1, basement-shelf-2">
+            </div>
+            <button class="btn btn-primary" onclick="moveItems()">Find & Move Items</button>
+            <div id="move-result" class="result"></div>
+            <div id="move-disambiguation-section" style="display: none;">
+                <h3>Multiple items found - Select which to move:</h3>
+                <div id="move-disambiguation-items"></div>
+                <button class="btn btn-primary" onclick="confirmMove()">Move Selected Items</button>
+                <button class="btn btn-secondary" onclick="cancelMove()">Cancel</button>
+            </div>
+        </div>
+
         <!-- Test Data Section -->
         <div class="section">
             <h2>🧪 Test Data Management</h2>
@@ -524,6 +545,141 @@
         function cancelRemoval() {
             document.getElementById('disambiguation-section').style.display = 'none';
             currentDisambiguationData = null;
+        }
+
+        // Move Items
+        let currentMoveDisambiguationData = null;
+
+        async function moveItems() {
+            const query = document.getElementById('move-query').value;
+            const targetBin = document.getElementById('move-target-bin').value;
+
+            if (!query.trim()) {
+                document.getElementById('move-result').innerHTML = '<div class="status-error">❌ Please enter an item description</div>';
+                return;
+            }
+
+            if (!targetBin.trim()) {
+                document.getElementById('move-result').innerHTML = '<div class="status-error">❌ Please enter a target bin ID</div>';
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/move`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        query: query,
+                        target_bin_id: targetBin
+                    })
+                });
+
+                const data = await response.json();
+                const resultDiv = document.getElementById('move-result');
+                const disambiguationSection = document.getElementById('move-disambiguation-section');
+
+                if (data.success) {
+                    resultDiv.innerHTML = `
+                        <div class="status-healthy">✅ Items Moved Successfully</div>
+                        <p><strong>Items Moved:</strong> ${data.data.items_moved}</p>
+                        <p><strong>Transaction ID:</strong> ${data.data.bulk_transaction_id}</p>
+                        <details>
+                            <summary>Moved Items</summary>
+                            <pre>${JSON.stringify(data.data.moved_items, null, 2)}</pre>
+                        </details>
+                    `;
+                    disambiguationSection.style.display = 'none';
+                    document.getElementById('move-query').value = '';
+                    document.getElementById('move-target-bin').value = '';
+                    currentMoveDisambiguationData = null;
+                } else if (data.error && data.error.code === 'DISAMBIGUATION_REQUIRED') {
+                    // Show disambiguation options
+                    currentMoveDisambiguationData = data.disambiguation;
+                    showMoveDisambiguationOptions(data.disambiguation);
+                    resultDiv.innerHTML = `<div class="status-warning">⚠️ ${data.error.message}</div>`;
+                } else {
+                    resultDiv.innerHTML = `<div class="status-error">❌ Failed to Move Items</div><pre>${formatResponse(data)}</pre>`;
+                    disambiguationSection.style.display = 'none';
+                }
+            } catch (error) {
+                document.getElementById('move-result').innerHTML = `<div class="status-error">❌ Connection Error</div><pre>Error: ${error.message}</pre>`;
+            }
+        }
+
+        function showMoveDisambiguationOptions(disambiguation) {
+            const itemsDiv = document.getElementById('move-disambiguation-items');
+            const section = document.getElementById('move-disambiguation-section');
+
+            itemsDiv.innerHTML = disambiguation.options.map(item => `
+                <div class="disambiguation-item">
+                    <input type="checkbox" id="move-item-${item.item_id}" value="${item.item_id}">
+                    <label for="move-item-${item.item_id}">
+                        <strong>${item.name}</strong> (Bin: ${item.bin_id})
+                        <br><small>${item.description}</small>
+                        <br><small>Confidence: ${(item.confidence_score * 100).toFixed(1)}%</small>
+                    </label>
+                </div>
+            `).join('');
+
+            section.style.display = 'block';
+        }
+
+        async function confirmMove() {
+            if (!currentMoveDisambiguationData) return;
+
+            const checkboxes = document.querySelectorAll('#move-disambiguation-items input[type="checkbox"]:checked');
+            const selectedIds = Array.from(checkboxes).map(cb => cb.value);
+            const targetBin = document.getElementById('move-target-bin').value;
+
+            if (selectedIds.length === 0) {
+                document.getElementById('move-result').innerHTML = '<div class="status-error">❌ Please select at least one item to move</div>';
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/move`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        query: currentMoveDisambiguationData.query || document.getElementById('move-query').value,
+                        target_bin_id: targetBin,
+                        item_ids: selectedIds
+                    })
+                });
+
+                const data = await response.json();
+                const resultDiv = document.getElementById('move-result');
+                const disambiguationSection = document.getElementById('move-disambiguation-section');
+
+                if (data.success) {
+                    resultDiv.innerHTML = `
+                        <div class="status-healthy">✅ Items Moved Successfully</div>
+                        <p><strong>Items Moved:</strong> ${data.data.items_moved}</p>
+                        <p><strong>Transaction ID:</strong> ${data.data.bulk_transaction_id}</p>
+                        <details>
+                            <summary>Moved Items</summary>
+                            <pre>${JSON.stringify(data.data.moved_items, null, 2)}</pre>
+                        </details>
+                    `;
+                    disambiguationSection.style.display = 'none';
+                    document.getElementById('move-query').value = '';
+                    document.getElementById('move-target-bin').value = '';
+                    currentMoveDisambiguationData = null;
+                } else {
+                    resultDiv.innerHTML = `<div class="status-error">❌ Failed to Move Items</div><pre>${formatResponse(data)}</pre>`;
+                }
+            } catch (error) {
+                document.getElementById('move-result').innerHTML = `<div class="status-error">❌ Connection Error</div><pre>Error: ${error.message}</pre>`;
+            }
+        }
+
+        function cancelMove() {
+            document.getElementById('move-disambiguation-section').style.display = 'none';
+            currentMoveDisambiguationData = null;
         }
 
         // Add Sample Data

@@ -269,3 +269,41 @@ class ChromaDBClient:
         except Exception as e:
             print(f"Error removing document {document_id}: {e}")
             return False
+
+    def update_document_metadata(self, document_id: str, metadata_updates: dict) -> bool:
+        """Update metadata for a specific document"""
+        try:
+            if self.inventory_collection is None:
+                print("Inventory collection not initialized")
+                return False
+
+            # Get the current document with embeddings
+            result = self.inventory_collection.get(ids=[document_id], include=["metadatas", "documents", "embeddings"])
+
+            if not result["ids"] or len(result["ids"]) == 0:
+                print(f"Document {document_id} not found")
+                return False
+
+            # Get current metadata, document, and embedding
+            current_metadata = result["metadatas"][0] if result["metadatas"] else {}
+            current_document = result["documents"][0] if result["documents"] else ""
+            current_embedding = result["embeddings"][0] if result["embeddings"] else None
+
+            # Update metadata with new values
+            updated_metadata = {**current_metadata, **metadata_updates}
+
+            # Update the document (ChromaDB requires re-adding with same ID to update)
+            # Must include the original embedding to avoid dimension mismatch
+            self.inventory_collection.upsert(
+                ids=[document_id],
+                documents=[current_document],
+                metadatas=[updated_metadata],
+                embeddings=[current_embedding] if current_embedding else None
+            )
+
+            print(f"Successfully updated metadata for document: {document_id}")
+            return True
+
+        except Exception as e:
+            print(f"Error updating document metadata {document_id}: {e}")
+            return False

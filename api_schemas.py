@@ -41,9 +41,12 @@ class RemoveItemRequest(BaseModel):
 
 class MoveItemRequest(BaseModel):
     query: str = Field(..., description="Description of item to move")
-    source_bin_id: Optional[str] = None
-    target_bin_id: str = Field(..., description="Destination bin ID")
-    confirmation_id: Optional[str] = None
+    target_bin_id: str = Field(..., description="Target bin ID to move items to")
+    item_ids: Optional[List[str]] = Field(None, description="Specific item IDs to move (for disambiguation)")
+    confirm_all: bool = Field(False, description="Confirm moving all matching items")
+    bulk_transaction_id: Optional[str] = None
+
+
 
 class SearchRequest(BaseModel):
     q: str = Field(..., description="Search query")
