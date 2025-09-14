@@ -85,3 +85,36 @@ class AuditLogEntry(BaseModel):
     bulk_transaction_id: Optional[str] = None
     description: str
     reversible: bool
+
+# Session Management Schemas
+class SessionContextData(BaseModel):
+    session_id: str
+    current_bin_id: Optional[str] = None
+    last_activity: str  # ISO format datetime string
+    created_at: str     # ISO format datetime string
+    metadata: Dict[str, Any] = {}
+
+class SetContextRequest(BaseModel):
+    session_id: Optional[str] = Field(None, description="Session ID (will create new if not provided)")
+    current_bin_id: Optional[str] = Field(None, description="Current bin ID to set as context")
+
+class ContextAwareAddRequest(BaseModel):
+    items: List[str] = Field(..., description="List of item names to add")
+    bin_id: Optional[str] = Field(None, description="Bin ID where items should be added (uses session context if not provided)")
+    session_id: Optional[str] = Field(None, description="Session ID for context")
+    bulk_transaction_id: Optional[str] = None
+
+class ContextAwareRemoveRequest(BaseModel):
+    query: str = Field(..., description="Description of item to remove")
+    item_ids: Optional[List[str]] = Field(None, description="Specific item IDs to remove (for disambiguation)")
+    confirm_all: bool = Field(False, description="Confirm removal of all matching items")
+    session_id: Optional[str] = Field(None, description="Session ID for context")
+    bulk_transaction_id: Optional[str] = None
+
+class ContextAwareMoveRequest(BaseModel):
+    query: str = Field(..., description="Description of item to move")
+    target_bin_id: Optional[str] = Field(None, description="Target bin ID to move items to (uses session context if not provided)")
+    item_ids: Optional[List[str]] = Field(None, description="Specific item IDs to move (for disambiguation)")
+    confirm_all: bool = Field(False, description="Confirm moving all matching items")
+    session_id: Optional[str] = Field(None, description="Session ID for context")
+    bulk_transaction_id: Optional[str] = None

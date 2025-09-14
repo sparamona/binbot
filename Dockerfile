@@ -27,6 +27,7 @@ COPY config/ ./config/
 COPY database/ ./database/
 COPY llm/ ./llm/
 COPY api/ ./api/
+COPY session/ ./session/
 
 # Make start script executable
 RUN chmod +x start.sh

@@ -18,7 +18,8 @@ def set_dependencies(db: ChromaDBClient):
 async def search_inventory(
     q: str = Query(..., description="Search query"),
     limit: int = Query(10, ge=1, le=100, description="Maximum number of results"),
-    offset: int = Query(0, ge=0, description="Number of results to skip")
+    offset: int = Query(0, ge=0, description="Number of results to skip"),
+    min_relevance: float = Query(0.6, ge=0.0, le=1.0, description="Minimum relevance score (0.0-1.0)")
 ):
     """Search inventory items using text matching"""
     try:
@@ -34,7 +35,7 @@ async def search_inventory(
             )
 
         # Perform search
-        search_results = db_client.search_documents(q, limit, offset)
+        search_results = db_client.search_documents(q, limit, offset, min_relevance)
 
         return StandardResponse(
             success=True,

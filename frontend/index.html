@@ -101,8 +101,75 @@
 <body>
     <h1>🤖 BinBot Inventory System - API Testing Interface</h1>
     <p><em>Test all available endpoints using the forms below</em></p>
+
+    <!-- Session Context Display -->
+    <div id="session-context" style="background: #f0f8ff; padding: 10px; margin: 10px 0; border-radius: 4px; border-left: 4px solid #007acc;">
+        <strong>Session Context:</strong>
+        <span id="context-display">No active session</span>
+        <button onclick="refreshContext()" style="margin-left: 10px; font-size: 12px;">Refresh</button>
+    </div>
     
     <div class="grid">
+        <!-- Session Management Section -->
+        <div class="section">
+            <h2>🔄 Session Management</h2>
+            <div style="margin-bottom: 15px;">
+                <label>Set Current Bin Context:</label>
+                <input type="text" id="context-bin-id" placeholder="Enter bin ID (e.g., 5)" style="margin: 0 10px;">
+                <button onclick="setContext()">Set Context</button>
+                <button onclick="resetContext()" style="margin-left: 10px;">Reset Context</button>
+            </div>
+            <div id="session-result"></div>
+        </div>
+
+        <!-- Context-Aware Operations Section -->
+        <div class="section">
+            <h2>🎯 Context-Aware Operations</h2>
+            <p><em>These operations use your session context when bin_id is not specified</em></p>
+
+            <!-- Context-Aware Add -->
+            <div style="margin-bottom: 20px;">
+                <h3>Add Items (Context-Aware)</h3>
+                <input type="text" id="context-add-items" placeholder="Enter items (comma-separated)" style="width: 300px;">
+                <input type="text" id="context-add-bin" placeholder="Bin ID (optional - uses context)" style="width: 150px; margin: 0 10px;">
+                <button onclick="contextAwareAdd()">Add Items</button>
+                <div id="context-add-result"></div>
+            </div>
+
+            <!-- Context-Aware Remove -->
+            <div style="margin-bottom: 20px;">
+                <h3>Remove Items (Context-Aware)</h3>
+                <input type="text" id="context-remove-query" placeholder="Search for items to remove" style="width: 300px;">
+                <button onclick="contextAwareRemove()">Remove Items</button>
+                <div id="context-remove-result"></div>
+
+                <!-- Context Remove Disambiguation -->
+                <div id="context-remove-disambiguation-section" style="display: none; margin-top: 15px;">
+                    <h4>Select Items to Remove:</h4>
+                    <div id="context-remove-disambiguation-items"></div>
+                    <button onclick="confirmContextRemoval()">Confirm Removal</button>
+                    <button onclick="cancelContextRemove()">Cancel</button>
+                </div>
+            </div>
+
+            <!-- Context-Aware Move -->
+            <div style="margin-bottom: 20px;">
+                <h3>Move Items (Context-Aware)</h3>
+                <input type="text" id="context-move-query" placeholder="Search for items to move" style="width: 200px;">
+                <input type="text" id="context-move-target" placeholder="Target bin (optional - uses context)" style="width: 150px; margin: 0 10px;">
+                <button onclick="contextAwareMove()">Move Items</button>
+                <div id="context-move-result"></div>
+
+                <!-- Context Move Disambiguation -->
+                <div id="context-move-disambiguation-section" style="display: none; margin-top: 15px;">
+                    <h4>Select Items to Move:</h4>
+                    <div id="context-move-disambiguation-items"></div>
+                    <button onclick="confirmContextMove()">Confirm Move</button>
+                    <button onclick="cancelContextMove()">Cancel</button>
+                </div>
+            </div>
+        </div>
+
         <!-- Health Check Section -->
         <div class="section">
             <h2>🏥 System Health</h2>
@@ -234,6 +301,9 @@
 
     <script>
         const API_BASE = '';  // Same origin
+
+        // Session management
+        let currentSessionId = null;
 
         // Utility function to format JSON response
         function formatResponse(data, includeRaw = true) {
@@ -871,9 +941,399 @@
             }
         });
 
-        // Auto-load health check on page load
+        // Context-Aware Operations
+        let currentContextRemoveQuery = null;
+        let currentContextMoveQuery = null;
+
+        async function contextAwareAdd() {
+            const itemsText = document.getElementById('context-add-items').value.trim();
+            const binId = document.getElementById('context-add-bin').value.trim();
+
+            if (!itemsText) {
+                alert('Please enter at least one item');
+                return;
+            }
+
+            const items = itemsText.split(',').map(item => item.trim()).filter(item => item.length > 0);
+
+            try {
+                const requestBody = {
+                    items: items,
+                    session_id: currentSessionId
+                };
+
+                if (binId) {
+                    requestBody.bin_id = binId;
+                }
+
+                const response = await fetch(`${API_BASE}/context/add`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody)
+                });
+
+                const data = await response.json();
+                const resultDiv = document.getElementById('context-add-result');
+
+                if (data.success) {
+                    const contextUsed = data.data.used_context ? ' (using session context)' : '';
+                    resultDiv.innerHTML = `
+                        <div class="status-healthy">✅ Items Added Successfully${contextUsed}</div>
+                        <p><strong>Items Added:</strong> ${data.data.items_added}</p>
+                        <p><strong>Bin ID:</strong> ${data.data.bin_id}</p>
+                        <p><strong>Session:</strong> ${data.data.session_id.substring(0, 8)}...</p>
+                    `;
+
+                    // Update session ID and clear form
+                    currentSessionId = data.data.session_id;
+                    document.getElementById('context-add-items').value = '';
+                    document.getElementById('context-add-bin').value = '';
+                    refreshContext();
+                } else {
+                    resultDiv.innerHTML = `<div class="status-error">❌ ${data.error.message}</div>`;
+                }
+            } catch (error) {
+                document.getElementById('context-add-result').innerHTML = `<div class="status-error">❌ Connection Error: ${error.message}</div>`;
+            }
+        }
+
+        async function contextAwareRemove() {
+            const query = document.getElementById('context-remove-query').value.trim();
+
+            if (!query) {
+                alert('Please enter a search query');
+                return;
+            }
+
+            currentContextRemoveQuery = query;
+
+            try {
+                const response = await fetch(`${API_BASE}/context/remove`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        query: query,
+                        session_id: currentSessionId
+                    })
+                });
+
+                const data = await response.json();
+                const resultDiv = document.getElementById('context-remove-result');
+                const disambiguationSection = document.getElementById('context-remove-disambiguation-section');
+
+                if (data.success) {
+                    resultDiv.innerHTML = `
+                        <div class="status-healthy">✅ Items Removed Successfully</div>
+                        <p><strong>Items Removed:</strong> ${data.data.items_removed}</p>
+                        <p><strong>Session:</strong> ${data.data.session_id.substring(0, 8)}...</p>
+                    `;
+                    currentSessionId = data.data.session_id;
+                    document.getElementById('context-remove-query').value = '';
+                    disambiguationSection.style.display = 'none';
+                    refreshContext();
+                } else if (data.error && data.error.code === 'DISAMBIGUATION_REQUIRED') {
+                    showContextRemoveDisambiguation(data.disambiguation);
+                    resultDiv.innerHTML = `<div class="status-warning">⚠️ ${data.error.message}</div>`;
+                } else {
+                    resultDiv.innerHTML = `<div class="status-error">❌ ${data.error.message}</div>`;
+                    disambiguationSection.style.display = 'none';
+                }
+            } catch (error) {
+                document.getElementById('context-remove-result').innerHTML = `<div class="status-error">❌ Connection Error: ${error.message}</div>`;
+            }
+        }
+
+        function showContextRemoveDisambiguation(disambiguation) {
+            const itemsDiv = document.getElementById('context-remove-disambiguation-items');
+            const section = document.getElementById('context-remove-disambiguation-section');
+
+            let html = '';
+            disambiguation.options.forEach((item, index) => {
+                html += `
+                    <div style="margin: 10px 0; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                        <label>
+                            <input type="checkbox" value="${item.item_id}" class="context-remove-checkbox">
+                            <strong>${item.name}</strong> (Bin: ${item.bin_id})
+                            <br><small>${item.description}</small>
+                            <br><small>Confidence: ${(item.confidence_score * 100).toFixed(1)}%</small>
+                        </label>
+                    </div>
+                `;
+            });
+
+            itemsDiv.innerHTML = html;
+            section.style.display = 'block';
+        }
+
+        async function confirmContextRemoval() {
+            const checkboxes = document.querySelectorAll('.context-remove-checkbox:checked');
+            const selectedIds = Array.from(checkboxes).map(cb => cb.value);
+
+            if (selectedIds.length === 0) {
+                alert('Please select at least one item to remove');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/context/remove`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        query: currentContextRemoveQuery,
+                        item_ids: selectedIds,
+                        session_id: currentSessionId
+                    })
+                });
+
+                const data = await response.json();
+                const resultDiv = document.getElementById('context-remove-result');
+                const disambiguationSection = document.getElementById('context-remove-disambiguation-section');
+
+                if (data.success) {
+                    resultDiv.innerHTML = `
+                        <div class="status-healthy">✅ Items Removed Successfully</div>
+                        <p><strong>Items Removed:</strong> ${data.data.items_removed}</p>
+                        <p><strong>Session:</strong> ${data.data.session_id.substring(0, 8)}...</p>
+                    `;
+                    currentSessionId = data.data.session_id;
+                    document.getElementById('context-remove-query').value = '';
+                    disambiguationSection.style.display = 'none';
+                    refreshContext();
+                } else {
+                    resultDiv.innerHTML = `<div class="status-error">❌ ${data.error.message}</div>`;
+                }
+            } catch (error) {
+                document.getElementById('context-remove-result').innerHTML = `<div class="status-error">❌ Connection Error: ${error.message}</div>`;
+            }
+        }
+
+        function cancelContextRemove() {
+            document.getElementById('context-remove-disambiguation-section').style.display = 'none';
+        }
+
+        async function contextAwareMove() {
+            const query = document.getElementById('context-move-query').value.trim();
+            const targetBin = document.getElementById('context-move-target').value.trim();
+
+            if (!query) {
+                alert('Please enter a search query');
+                return;
+            }
+
+            currentContextMoveQuery = query;
+
+            try {
+                const requestBody = {
+                    query: query,
+                    session_id: currentSessionId
+                };
+
+                if (targetBin) {
+                    requestBody.target_bin_id = targetBin;
+                }
+
+                const response = await fetch(`${API_BASE}/context/move`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody)
+                });
+
+                const data = await response.json();
+                const resultDiv = document.getElementById('context-move-result');
+                const disambiguationSection = document.getElementById('context-move-disambiguation-section');
+
+                if (data.success) {
+                    const contextUsed = data.data.used_context ? ' (using session context)' : '';
+                    resultDiv.innerHTML = `
+                        <div class="status-healthy">✅ Items Moved Successfully${contextUsed}</div>
+                        <p><strong>Items Moved:</strong> ${data.data.items_moved}</p>
+                        <p><strong>Target Bin:</strong> ${data.data.target_bin_id}</p>
+                        <p><strong>Session:</strong> ${data.data.session_id.substring(0, 8)}...</p>
+                    `;
+                    currentSessionId = data.data.session_id;
+                    document.getElementById('context-move-query').value = '';
+                    document.getElementById('context-move-target').value = '';
+                    disambiguationSection.style.display = 'none';
+                    refreshContext();
+                } else if (data.error && data.error.code === 'DISAMBIGUATION_REQUIRED') {
+                    showContextMoveDisambiguation(data.disambiguation);
+                    resultDiv.innerHTML = `<div class="status-warning">⚠️ ${data.error.message}</div>`;
+                } else {
+                    resultDiv.innerHTML = `<div class="status-error">❌ ${data.error.message}</div>`;
+                    disambiguationSection.style.display = 'none';
+                }
+            } catch (error) {
+                document.getElementById('context-move-result').innerHTML = `<div class="status-error">❌ Connection Error: ${error.message}</div>`;
+            }
+        }
+
+        function showContextMoveDisambiguation(disambiguation) {
+            const itemsDiv = document.getElementById('context-move-disambiguation-items');
+            const section = document.getElementById('context-move-disambiguation-section');
+
+            let html = '';
+            disambiguation.options.forEach((item, index) => {
+                html += `
+                    <div style="margin: 10px 0; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                        <label>
+                            <input type="checkbox" value="${item.item_id}" class="context-move-checkbox">
+                            <strong>${item.name}</strong> (Bin: ${item.bin_id})
+                            <br><small>${item.description}</small>
+                            <br><small>Confidence: ${(item.confidence_score * 100).toFixed(1)}%</small>
+                        </label>
+                    </div>
+                `;
+            });
+
+            itemsDiv.innerHTML = html;
+            section.style.display = 'block';
+        }
+
+        async function confirmContextMove() {
+            const checkboxes = document.querySelectorAll('.context-move-checkbox:checked');
+            const selectedIds = Array.from(checkboxes).map(cb => cb.value);
+            const targetBin = document.getElementById('context-move-target').value.trim();
+
+            if (selectedIds.length === 0) {
+                alert('Please select at least one item to move');
+                return;
+            }
+
+            try {
+                const requestBody = {
+                    query: currentContextMoveQuery,
+                    item_ids: selectedIds,
+                    session_id: currentSessionId
+                };
+
+                if (targetBin) {
+                    requestBody.target_bin_id = targetBin;
+                }
+
+                const response = await fetch(`${API_BASE}/context/move`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody)
+                });
+
+                const data = await response.json();
+                const resultDiv = document.getElementById('context-move-result');
+                const disambiguationSection = document.getElementById('context-move-disambiguation-section');
+
+                if (data.success) {
+                    const contextUsed = data.data.used_context ? ' (using session context)' : '';
+                    resultDiv.innerHTML = `
+                        <div class="status-healthy">✅ Items Moved Successfully${contextUsed}</div>
+                        <p><strong>Items Moved:</strong> ${data.data.items_moved}</p>
+                        <p><strong>Target Bin:</strong> ${data.data.target_bin_id}</p>
+                        <p><strong>Session:</strong> ${data.data.session_id.substring(0, 8)}...</p>
+                    `;
+                    currentSessionId = data.data.session_id;
+                    document.getElementById('context-move-query').value = '';
+                    document.getElementById('context-move-target').value = '';
+                    disambiguationSection.style.display = 'none';
+                    refreshContext();
+                } else {
+                    resultDiv.innerHTML = `<div class="status-error">❌ ${data.error.message}</div>`;
+                }
+            } catch (error) {
+                document.getElementById('context-move-result').innerHTML = `<div class="status-error">❌ Connection Error: ${error.message}</div>`;
+            }
+        }
+
+        function cancelContextMove() {
+            document.getElementById('context-move-disambiguation-section').style.display = 'none';
+        }
+
+        // Session Management Functions
+        async function refreshContext() {
+            if (!currentSessionId) {
+                document.getElementById('context-display').textContent = 'No active session';
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/session/${currentSessionId}/context`);
+                const data = await response.json();
+
+                if (data.success) {
+                    const binText = data.data.current_bin_id ? `Bin ${data.data.current_bin_id}` : 'No bin set';
+                    document.getElementById('context-display').innerHTML = `
+                        Session: ${currentSessionId.substring(0, 8)}... | Current Bin: <strong>${binText}</strong>
+                    `;
+                } else {
+                    document.getElementById('context-display').textContent = 'Session expired or not found';
+                    currentSessionId = null;
+                }
+            } catch (error) {
+                document.getElementById('context-display').textContent = 'Error loading context';
+            }
+        }
+
+        async function setContext() {
+            const binId = document.getElementById('context-bin-id').value.trim();
+
+            if (!binId) {
+                alert('Please enter a bin ID');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/session/context`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: currentSessionId,
+                        current_bin_id: binId
+                    })
+                });
+
+                const data = await response.json();
+                const resultDiv = document.getElementById('session-result');
+
+                if (data.success) {
+                    currentSessionId = data.data.session.session_id;
+                    resultDiv.innerHTML = `<div class="status-healthy">✅ ${data.data.message}</div>`;
+                    document.getElementById('context-bin-id').value = '';
+                    refreshContext();
+                } else {
+                    resultDiv.innerHTML = `<div class="status-error">❌ Failed to set context: ${data.error.message}</div>`;
+                }
+            } catch (error) {
+                document.getElementById('session-result').innerHTML = `<div class="status-error">❌ Connection Error: ${error.message}</div>`;
+            }
+        }
+
+        async function resetContext() {
+            if (!currentSessionId) {
+                alert('No active session to reset');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/session/${currentSessionId}/reset`, {
+                    method: 'POST'
+                });
+
+                const data = await response.json();
+                const resultDiv = document.getElementById('session-result');
+
+                if (data.success) {
+                    resultDiv.innerHTML = `<div class="status-healthy">✅ ${data.data.message}</div>`;
+                    refreshContext();
+                } else {
+                    resultDiv.innerHTML = `<div class="status-error">❌ Failed to reset context: ${data.error.message}</div>`;
+                }
+            } catch (error) {
+                document.getElementById('session-result').innerHTML = `<div class="status-error">❌ Connection Error: ${error.message}</div>`;
+            }
+        }
+
+        // Auto-load health check and initialize session on page load
         document.addEventListener('DOMContentLoaded', function() {
             checkHealth();
+            // Initialize session context display
+            refreshContext();
         });
     </script>
 </body>

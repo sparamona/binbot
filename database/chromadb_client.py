@@ -8,9 +8,10 @@ from chromadb.config import Settings
 
 class ChromaDBClient:
     """ChromaDB client for BinBot inventory management"""
-    
-    def __init__(self, config: Dict[str, Any]):
+
+    def __init__(self, config: Dict[str, Any], llm_client=None):
         self.config = config
+        self.llm_client = llm_client
         self.client: Optional[chromadb.ClientAPI] = None
         self.inventory_collection: Optional[chromadb.Collection] = None
         self.audit_log_collection: Optional[chromadb.Collection] = None
@@ -203,13 +204,72 @@ class ChromaDBClient:
             print(f"Error adding audit log entry: {e}")
             return False
     
-    def search_documents(self, query: str, limit: int = 10, offset: int = 0) -> Dict[str, Any]:
-        """Search documents in the inventory collection"""
+    def search_documents(self, query: str, limit: int = 10, offset: int = 0, min_relevance: float = 0.6) -> Dict[str, Any]:
+        """Search documents in the inventory collection using semantic similarity"""
         try:
             if self.inventory_collection is None:
                 raise Exception("Inventory collection not initialized")
 
-            # Get all documents for simple text matching
+            # Try semantic search first if we have an LLM client for embeddings
+            if hasattr(self, 'llm_client') and self.llm_client:
+                try:
+                    # Generate embedding for the search query
+                    from llm.embeddings import EmbeddingService
+                    embedding_service = EmbeddingService(self.llm_client)
+                    query_embedding = embedding_service.generate_embedding(query)
+
+                    if query_embedding:
+                        # Perform vector similarity search
+                        search_results = self.inventory_collection.query(
+                            query_embeddings=[query_embedding],
+                            n_results=limit + offset,  # Get more results to handle pagination
+                            include=['metadatas', 'documents', 'distances']
+                        )
+
+                        if search_results['ids'] and len(search_results['ids'][0]) > 0:
+                            matching_items = []
+
+                            # Process results starting from offset
+                            ids = search_results['ids'][0]
+                            metadatas = search_results['metadatas'][0] if search_results['metadatas'] else []
+                            distances = search_results['distances'][0] if search_results['distances'] else []
+
+                            for i in range(len(ids)):
+                                if i < offset:
+                                    continue  # Skip items before offset
+                                if len(matching_items) >= limit:
+                                    break  # Stop when we have enough results
+
+                                metadata = metadatas[i] if i < len(metadatas) else {}
+                                distance = distances[i] if i < len(distances) else 1.0
+
+                                # Convert distance to relevance score (lower distance = higher relevance)
+                                relevance_score = max(0.0, 1.0 - distance)
+
+                                # Filter by minimum relevance score
+                                if relevance_score >= min_relevance:
+                                    matching_items.append({
+                                        "id": ids[i],
+                                        "name": metadata.get('name', ''),
+                                        "description": metadata.get('description', ''),
+                                        "bin_id": metadata.get('bin_id', ''),
+                                        "created_at": metadata.get('created_at', ''),
+                                        "relevance_score": relevance_score
+                                    })
+
+                            total_results = len(ids)
+                            has_more = offset + limit < total_results
+
+                            return {
+                                "total_results": total_results,
+                                "results": matching_items,
+                                "has_more": has_more
+                            }
+
+                except Exception as e:
+                    print(f"Semantic search failed, falling back to text search: {e}")
+
+            # Fallback to simple text matching if semantic search fails
             all_results = self.inventory_collection.get(
                 include=['metadatas', 'documents']
             )
@@ -230,14 +290,18 @@ class ChromaDBClient:
                     query_lower in description or
                     query_lower in document_lower):
 
-                    matching_items.append({
-                        "id": all_results['ids'][i],
-                        "name": metadata.get('name', ''),
-                        "description": metadata.get('description', ''),
-                        "bin_id": metadata.get('bin_id', ''),
-                        "created_at": metadata.get('created_at', ''),
-                        "relevance_score": 1.0  # Simple matching - all matches have same score
-                    })
+                    relevance_score = 1.0  # Simple matching - all matches have same score
+
+                    # Filter by minimum relevance score
+                    if relevance_score >= min_relevance:
+                        matching_items.append({
+                            "id": all_results['ids'][i],
+                            "name": metadata.get('name', ''),
+                            "description": metadata.get('description', ''),
+                            "bin_id": metadata.get('bin_id', ''),
+                            "created_at": metadata.get('created_at', ''),
+                            "relevance_score": relevance_score
+                        })
 
             # Apply pagination
             total_results = len(matching_items)

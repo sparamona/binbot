@@ -8,13 +8,13 @@ from config.settings import Settings
 from database.chromadb_client import ChromaDBClient
 from llm.client import LLMClient
 from llm.embeddings import EmbeddingService
-from api import health, search, test, add, remove, move
+from api import health, search, test, add, remove, move, session, context
 from api_schemas import StandardResponse, ErrorDetail
 
 # Global instances
 settings = Settings()
-db_client = ChromaDBClient(settings.config)
 llm_client = LLMClient(settings.config)
+db_client = ChromaDBClient(settings.config, llm_client)
 embedding_service = EmbeddingService(llm_client)
 startup_time: float = 0
 
@@ -67,6 +67,15 @@ app.include_router(test.router)
 app.include_router(add.router)
 app.include_router(remove.router)
 app.include_router(move.router)
+app.include_router(session.router, prefix="/session", tags=["session"])
+app.include_router(context.router, prefix="/context", tags=["context"])
+
+# Set dependencies for API routers
+health.set_dependencies(db_client, llm_client, startup_time)
+add.set_dependencies(db_client, embedding_service)
+remove.set_dependencies(db_client, embedding_service)
+move.set_dependencies(db_client, embedding_service)
+context.set_dependencies(db_client, embedding_service)
 
 @app.get("/test")
 async def test_page():
