@@ -74,16 +74,25 @@ class LLMClient:
             print(f"LLM connection validation error: {e}")
             return False
 
-    async def chat_completion(self, messages, temperature=0.7, max_tokens=500):
+    async def chat_completion(self, messages, temperature=0.7, max_tokens=500, tools=None, tool_choice=None):
         """Generate chat completion using the available LLM provider"""
         if self.provider == "openai" and self.openai_client:
             try:
-                response = self.openai_client.chat.completions.create(
-                    model="gpt-3.5-turbo",
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens
-                )
+                # Prepare the request parameters
+                request_params = {
+                    "model": "gpt-3.5-turbo",
+                    "messages": messages,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens
+                }
+
+                # Add function calling parameters if provided
+                if tools:
+                    request_params["tools"] = tools
+                    if tool_choice:
+                        request_params["tool_choice"] = tool_choice
+
+                response = self.openai_client.chat.completions.create(**request_params)
                 return response
             except Exception as e:
                 print(f"OpenAI chat completion error: {e}")

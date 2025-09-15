@@ -16,7 +16,7 @@ import uuid
 from datetime import datetime
 
 from api_schemas import StandardResponse, ErrorDetail
-from nlp.command_processor import CommandProcessor
+from nlp.function_command_processor import FunctionCommandProcessor
 
 # Global dependencies (will be set by main app)
 db_client = None
@@ -71,8 +71,8 @@ async def process_natural_language_command(request: NLPCommandRequest):
             )
             return StandardResponse(success=False, error=error_detail)
 
-        # Initialize command processor
-        processor = CommandProcessor(
+        # Initialize function-based command processor
+        processor = FunctionCommandProcessor(
             db_client=db_client,
             embedding_service=embedding_service,
             llm_client=llm_client
@@ -106,7 +106,7 @@ async def process_natural_language_command(request: NLPCommandRequest):
                 details={
                     "command": request.command,
                     "error": result.error,
-                    "suggestions": result.suggestions
+                    "suggestions": getattr(result, 'suggestions', None)
                 }
             )
             return StandardResponse(success=False, error=error_detail)

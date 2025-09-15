@@ -18,10 +18,11 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ConversationMessage:
     """Represents a single message in the conversation"""
-    role: str  # "user" or "assistant"
+    role: str  # "user", "assistant", or "function"
     content: str
     timestamp: float
     session_id: Optional[str] = None
+    name: Optional[str] = None  # Required for function messages
 
 class ConversationHistory:
     """Manages conversation history for a single session"""
@@ -33,22 +34,23 @@ class ConversationHistory:
         self.messages: List[ConversationMessage] = []
         self._lock = threading.Lock()
     
-    def add_message(self, role: str, content: str) -> None:
+    def add_message(self, role: str, content: str, name: Optional[str] = None) -> None:
         """Add a message to the conversation history"""
         with self._lock:
             message = ConversationMessage(
                 role=role,
                 content=content,
                 timestamp=time.time(),
-                session_id=self.session_id
+                session_id=self.session_id,
+                name=name
             )
             self.messages.append(message)
             logger.debug(f"Added {role} message to session {self.session_id}: {content[:100]}...")
             logger.debug(f"Total messages in session {self.session_id}: {len(self.messages)}")
             self._cleanup_old_messages()
     
-    def get_messages(self, include_system_prompt: bool = True) -> List[Dict[str, str]]:
-        """Get conversation messages formatted for LLM"""
+    def get_messages(self, include_system_prompt: bool = True, max_messages: int = 3) -> List[Dict[str, str]]:
+        """Get conversation messages formatted for LLM, limited to recent messages"""
         with self._lock:
             self._cleanup_old_messages()
 
@@ -61,14 +63,19 @@ class ConversationHistory:
                     "content": self._get_system_prompt()
                 })
 
-            # Add conversation history
-            for msg in self.messages:
-                messages.append({
+            # Add conversation history (limit to last N messages)
+            recent_messages = self.messages[-max_messages:] if max_messages > 0 else self.messages
+            for msg in recent_messages:
+                message_dict = {
                     "role": msg.role,
                     "content": msg.content
-                })
+                }
+                # Add name field for function messages (required by OpenAI)
+                if msg.role == "function" and msg.name:
+                    message_dict["name"] = msg.name
+                messages.append(message_dict)
 
-            logger.debug(f"Returning {len(messages)} messages for session {self.session_id}")
+            logger.debug(f"Returning {len(messages)} messages for session {self.session_id} (limited to last {max_messages})")
             message_summary = [f"{m['role']}: {m['content'][:50]}..." for m in messages]
             logger.debug(f"Messages: {message_summary}")
 
@@ -90,70 +97,46 @@ class ConversationHistory:
     
     def _get_system_prompt(self) -> str:
         """Get the system prompt for the LLM"""
-        return """You are BinBot's natural language command parser. You help users interact with their inventory system by understanding their requests and converting them to API calls.
+        return """You are BinBot, an intelligent inventory management assistant. You help users manage their inventory by understanding their natural language requests and calling the appropriate functions.
 
 🎯 YOUR ROLE:
-- Parse natural language commands into structured JSON
+- Understand natural language commands about inventory management
+- Call the appropriate functions to perform inventory operations
 - Handle conversational and casual language naturally
-- Be flexible with command variations and synonyms
-- Support context-aware commands using conversation history
+- Use conversation context to understand follow-up commands
+- Provide helpful responses based on function call results
 
-⚠️ IMPORTANT CONSTRAINTS:
-- You MUST respond with valid JSON only (never plain text)
-- All inventory information comes from API calls - never guess or assume
-- If you can't parse a command clearly, ask for clarification
+🔧 AVAILABLE FUNCTIONS:
+- add_items_to_bin: Add items to a specific bin
+- remove_items_from_bin: Remove items from a specific bin
+- move_items_between_bins: Move items from one bin to another
+- search_for_items: Search for items in the inventory
+- list_bin_contents: List all items in a specific bin
 
-Your job is to understand user intent and convert it to the appropriate API call.
+💬 CONVERSATION STYLE:
+- Be friendly and helpful
+- Use conversation context for follow-up commands like "also add nuts" or "what about bin 5"
+- Ask for clarification when commands are ambiguous
+- Confirm successful operations and provide clear feedback
 
-Supported actions:
-- "add": Add items to a bin (requires: items, target_bin)
-- "remove": Remove items from a bin (requires: items, source_bin)
-- "move": Move items between bins (requires: items, source_bin, target_bin)
-- "search": Search for items (requires: search_query)
-- "list_bin": List contents of a bin (requires: bin_id)
+🎯 COMMAND EXAMPLES:
+- "add bolts to bin 3" → call add_items_to_bin with items=["bolts"], bin_id="3"
+- "put screws and nuts in bin 5" → call add_items_to_bin with items=["screws", "nuts"], bin_id="5"
+- "also add washers" (after previous add) → call add_items_to_bin with items=["washers"], bin_id=[previous bin]
+- "remove wires from bin 2" → call remove_items_from_bin with items=["wires"], bin_id="2"
+- "move springs from bin 1 to bin 4" → call move_items_between_bins with items=["springs"], source_bin_id="1", target_bin_id="4"
+- "what's in bin 8" → call list_bin_contents with bin_id="8"
+- "find my electronics" → call search_for_items with query="electronics"
+- "where is the sudoku" → call search_for_items with query="sudoku"
 
-ALWAYS return JSON in this exact format:
-{
-  "action": "add|remove|move|search|list_bin",
-  "items": ["item1", "item2"],
-  "source_bin": "1",
-  "target_bin": "3",
-  "search_query": "electronics",
-  "bin_id": "5",
-  "confidence": 0.95,
-  "missing_info": ["target_bin"],
-  "clarification_needed": "Which bin should I add the items to?"
-}
-
-Parsing Guidelines:
-1. Be flexible with natural language variations ("what's in", "show me", "list", "contents of", etc.)
-2. Handle casual language ("bin 3", "the third bin", "that bin", etc.)
-3. Use conversation context to resolve ambiguous references
-4. Parse item lists naturally (handle "and", commas, multiple items)
-5. Extract bin numbers from various formats ("bin 3", "bin number 5", "the 3rd bin")
-6. For follow-up commands like "also add nuts", use conversation history to find the target bin
-7. Set confidence based on clarity - be generous with clear intent even if wording is casual
-8. If truly ambiguous, ask for clarification in a helpful way
-
-Command Variations to Support:
-- "what's in bin 5" / "show me bin 5" / "list bin 5 contents" → list_bin
-- "find my screws" / "where are the screws" / "search for screws" → search
-- "put bolts in bin 3" / "add bolts to bin 3" / "store bolts in the third bin" → add
-- "take out the wires" / "remove wires from bin 2" → remove (ask for bin if missing)
-- "move the springs to bin 4" / "transfer springs from bin 2 to bin 4" → move
-
-Examples:
-- "add bolts to bin 3" → {"action": "add", "items": ["bolts"], "target_bin": "3", "confidence": 0.95}
-- "put some screws in the third bin" → {"action": "add", "items": ["screws"], "target_bin": "3", "confidence": 0.9}
-- "also add nuts" (after previous add) → {"action": "add", "items": ["nuts"], "target_bin": "3", "confidence": 0.9}
-- "what's in bin 8" → {"action": "list_bin", "bin_id": "8", "confidence": 0.95}
-- "show me what's in the fifth bin" → {"action": "list_bin", "bin_id": "5", "confidence": 0.9}
-- "where is the sudoku" → {"action": "search", "search_query": "sudoku", "confidence": 0.95}
-- "find my electronics" → {"action": "search", "search_query": "electronics", "confidence": 0.95}
-- "remove wires" → {"action": "remove", "items": ["wires"], "missing_info": ["source_bin"], "clarification_needed": "Which bin should I remove the wires from?", "confidence": 0.7}
-- "take the springs out of bin 2" → {"action": "remove", "items": ["springs"], "source_bin": "2", "confidence": 0.95}
-- "move bolts from bin 1 to bin 4" → {"action": "move", "items": ["bolts"], "source_bin": "1", "target_bin": "4", "confidence": 0.95}
-- "I can't understand that" → {"action": "unknown", "confidence": 0.0, "clarification_needed": "Could you rephrase that? I can help you add, remove, move, search for items, or list bin contents."}"""
+⚠️ IMPORTANT GUIDELINES:
+- Be flexible with natural language variations
+- Handle casual language and different ways of expressing the same intent
+- Use conversation context to resolve ambiguous references like "also add" or "that bin"
+- Parse item lists naturally (handle "and", commas, multiple items)
+- Extract bin numbers from various formats ("bin 3", "bin number 5", "the 3rd bin")
+- If information is missing or ambiguous, ask for clarification in a helpful way
+- Always call the appropriate function - don't just provide text responses about inventory"""
 
     def clear(self) -> None:
         """Clear all messages from the conversation"""
@@ -199,12 +182,22 @@ class ConversationManager:
         logger.debug(f"Adding assistant message to session {session_id}: {content[:100]}...")
         conversation = self.get_conversation(session_id)
         conversation.add_message("assistant", content)
+
+    def add_message(self, session_id: str, role: str, content: str, name: Optional[str] = None) -> None:
+        """Add a message with any role to the conversation"""
+        logger.debug(f"Adding {role} message to session {session_id}: {content[:100]}...")
+        conversation = self.get_conversation(session_id)
+        conversation.add_message(role, content, name)
+
+    def get_messages(self, session_id: str) -> List[Dict[str, str]]:
+        """Get conversation messages formatted for LLM (alias for get_messages_for_llm)"""
+        return self.get_messages_for_llm(session_id)
     
     def get_messages_for_llm(self, session_id: str) -> List[Dict[str, str]]:
-        """Get conversation messages formatted for LLM"""
+        """Get conversation messages formatted for LLM (limited to last 3 messages)"""
         logger.debug(f"Getting messages for LLM for session {session_id}")
         conversation = self.get_conversation(session_id)
-        messages = conversation.get_messages(include_system_prompt=True)
+        messages = conversation.get_messages(include_system_prompt=True, max_messages=3)
         logger.debug(f"Returning {len(messages)} messages to LLM for session {session_id}")
         return messages
     
