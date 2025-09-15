@@ -244,7 +244,53 @@ This plan breaks down the BinBot implementation into small, testable phases. Eac
 
 ---
 
-## Phase 10: Undo Functionality
+## Phase 10: Natural Language Text Interface
+**Goal**: Create a simple text-based interface for natural language inventory commands
+
+### Tasks:
+1. **Natural language command parser**
+   - Create LLM-based command interpretation
+   - Parse commands like "add bolts to bin 3"
+   - Extract action, items, and locations
+   - Handle context and follow-up commands
+
+2. **Command processing engine**
+   - Map parsed commands to API calls
+   - Implement context retention ("also add nuts")
+   - Support multiple command types (add, remove, move, search)
+   - Add command validation and confirmation
+
+3. **Simple text interface frontend**
+   - Create chat-like interface for command input
+   - Display command results and confirmations
+   - Show command history
+   - Add help and examples
+
+4. **Context-aware processing**
+   - Remember previous bin/item context
+   - Support follow-up commands
+   - Handle ambiguous references
+   - Maintain conversation state
+
+### Commands to Support:
+- "add bolts to bin 3" → Parse item, action, location
+- "also add nuts" → Use previous context (bin 3)
+- "remove wires from bin 2" → Remove operation
+- "move screws from bin 1 to bin 5" → Move operation
+- "search for electronics" → Search operation
+- "what's in bin 7?" → List bin contents
+- "undo last command" → Rollback functionality
+
+### Testing:
+- Test basic command parsing accuracy
+- Test context retention between commands
+- Test error handling for ambiguous commands
+- Test all supported command types
+- Test complex multi-step operations
+
+---
+
+## Phase 11: Undo Functionality
 **Goal**: Users can undo recent operations
 
 ### Tasks:
@@ -266,7 +312,7 @@ This plan breaks down the BinBot implementation into small, testable phases. Eac
 
 ---
 
-## Phase 11: Image Support (Multimodal)
+## Phase 12: Image Support (Multimodal)
 **Goal**: Users can attach images to items
 
 ### Tasks:
@@ -291,7 +337,7 @@ This plan breaks down the BinBot implementation into small, testable phases. Eac
 
 ---
 
-## Phase 12: Voice Interface (Web Speech API)
+## Phase 13: Voice Interface (Web Speech API)
 **Goal**: Voice input for natural interaction
 
 ### Tasks:
@@ -312,7 +358,7 @@ This plan breaks down the BinBot implementation into small, testable phases. Eac
 
 ---
 
-## Phase 13: Advanced Features & Polish
+## Phase 14: Advanced Features & Polish
 **Goal**: Complete remaining advanced features
 
 ### Tasks:
@@ -338,7 +384,7 @@ This plan breaks down the BinBot implementation into small, testable phases. Eac
 
 ---
 
-## Phase 14: UI Enhancement & Final Polish
+## Phase 15: UI Enhancement & Final Polish
 **Goal**: Improve user interface and experience
 
 ### Tasks:
