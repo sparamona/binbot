@@ -15,7 +15,9 @@ from config.settings import Settings
 from database.chromadb_client import ChromaDBClient
 from llm.client import LLMClient
 from llm.embeddings import EmbeddingService
-from api import health, search, test, add, remove, move, session, bulk, nlp, voice
+from api import health, search, test, add, remove, move, session, bulk, nlp, voice, images
+from storage.image_storage import ImageStorage
+from llm.vision import VisionService
 from api_schemas import StandardResponse, ErrorDetail
 
 # Global instances
@@ -23,6 +25,8 @@ settings = Settings()
 llm_client = LLMClient(settings.config)
 db_client = ChromaDBClient(settings.config, llm_client)
 embedding_service = EmbeddingService(llm_client)
+image_storage = ImageStorage()
+vision_service = VisionService(settings.config)
 startup_time: float = 0
 
 @asynccontextmanager
@@ -42,10 +46,11 @@ async def lifespan(app: FastAPI):
 
     # Initialize LLM clients
     llm_client.initialize()
+    vision_service.initialize()
 
     # Set dependencies for API routers
     health.set_dependencies(db_client, llm_client, startup_time)
-    search.set_dependencies(db_client)
+    search.set_dependencies(db_client, embedding_service)
     test.set_dependencies(db_client, embedding_service)
     add.set_dependencies(db_client, embedding_service)
     remove.set_dependencies(db_client, embedding_service)
@@ -79,6 +84,7 @@ app.include_router(session.router, prefix="/session", tags=["session"])
 app.include_router(bulk.router)
 app.include_router(nlp.router)
 app.include_router(voice.router, prefix="/voice", tags=["voice"])
+app.include_router(images.router)
 
 # Set dependencies for API routers
 health.set_dependencies(db_client, llm_client, startup_time)
@@ -86,7 +92,8 @@ add.set_dependencies(db_client, embedding_service)
 remove.set_dependencies(db_client, embedding_service)
 move.set_dependencies(db_client, embedding_service)
 bulk.set_dependencies(db_client, embedding_service)
-nlp.set_dependencies(db_client, embedding_service, llm_client)
+nlp.set_dependencies(db_client, embedding_service, llm_client, vision_service)
+images.set_dependencies(db_client, image_storage, vision_service, embedding_service)
 
 @app.get("/test")
 async def test_page():

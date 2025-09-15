@@ -51,6 +51,73 @@
         .btn:hover {
             background-color: #0056b3;
         }
+        .btn-danger:hover {
+            background-color: #c82333 !important;
+        }
+        .image-preview {
+            margin: 10px 0;
+            text-align: center;
+            border: 2px dashed #ddd;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .image-gallery {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 10px 0;
+        }
+        .image-thumbnail {
+            position: relative;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .image-thumbnail img {
+            width: 100px;
+            height: 100px;
+            object-fit: cover;
+            cursor: pointer;
+        }
+        .image-thumbnail.primary {
+            border-color: #007bff;
+            border-width: 3px;
+        }
+        .image-thumbnail .image-actions {
+            position: absolute;
+            top: 0;
+            right: 0;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 2px 5px;
+            font-size: 12px;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.8);
+        }
+        .modal-content {
+            position: relative;
+            margin: 5% auto;
+            padding: 20px;
+            width: 90%;
+            max-width: 800px;
+            background: white;
+            border-radius: 8px;
+        }
+        .close {
+            position: absolute;
+            top: 10px;
+            right: 20px;
+            font-size: 30px;
+            cursor: pointer;
+        }
         .btn-success {
             background-color: #28a745;
         }
@@ -204,6 +271,56 @@
             <div id="add-result" class="result"></div>
         </div>
 
+        <!-- Image Upload Section -->
+        <div class="section">
+            <h2>📷 Upload Image</h2>
+            <div class="form-group">
+                <label for="image-item-id">Item ID (from search results):</label>
+                <input type="text" id="image-item-id" placeholder="e.g., abc123-def456-ghi789">
+            </div>
+            <div class="form-group">
+                <label for="image-file">Select Image:</label>
+                <input type="file" id="image-file" accept="image/*" onchange="previewImage(this)">
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="set-primary"> Set as primary image
+                </label>
+            </div>
+            <div id="image-preview" class="image-preview" style="display: none;">
+                <img id="preview-img" style="max-width: 300px; max-height: 200px; border-radius: 4px;">
+            </div>
+            <button class="btn btn-primary" onclick="uploadImage()">Upload Image</button>
+            <button class="btn btn-secondary" onclick="analyzeImage()" id="analyze-btn" style="display: none;">🔍 Analyze with AI</button>
+            <div id="image-result" class="result"></div>
+        </div>
+
+        <!-- Smart Image Upload Section -->
+        <div class="section">
+            <h2>🤖 Smart Image Upload</h2>
+            <p style="color: #666; font-size: 14px;">Upload an image to a bin and let AI automatically identify and add items</p>
+            <div class="form-group">
+                <label for="smart-bin-id">Bin ID:</label>
+                <input type="text" id="smart-bin-id" placeholder="e.g., 3, 5, 12">
+            </div>
+            <div class="form-group">
+                <label for="smart-image-file">
+                    Select Image:
+                    <input type="file" id="smart-image-file" accept="image/*" onchange="previewSmartImage()">
+                </label>
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="auto-analyze" checked> Auto-analyze and create items
+                </label>
+            </div>
+            <div id="smart-image-preview" class="image-preview" style="display: none;">
+                <img id="smart-preview-img" style="max-width: 300px; max-height: 200px; border-radius: 4px;">
+            </div>
+            <button class="btn btn-success" onclick="uploadImageToBin()">🚀 Upload & Analyze</button>
+            <div id="smart-image-result" class="result"></div>
+        </div>
+
         <!-- Remove Items Section -->
         <div class="section">
             <h2>🗑️ Remove Items</h2>
@@ -247,6 +364,7 @@
             <h2>🧪 Test Data Management</h2>
             <button class="btn btn-success" onclick="addSampleData()">Add Sample Data</button>
             <button class="btn btn-warning" onclick="listAllItems()">List All Items</button>
+            <button class="btn btn-danger" onclick="clearDatabase()" style="background-color: #dc3545;">🗑️ Clear Database</button>
             <div id="test-result" class="result"></div>
         </div>
 
@@ -898,21 +1016,61 @@
                     if (data.data.total_results === 0) {
                         resultDiv.innerHTML = `<div>No items found for "${query}"</div>`;
                     } else {
-                        let html = `<div><strong>Found ${data.data.total_results} items (showing ${data.data.results.length}):</strong></div><br>`;
+                        let html = `<div class="status-healthy">✅ Search Results</div>`;
+                        html += `<p><strong>Found ${data.data.total_results} items (showing ${data.data.results.length}):</strong></p>`;
+
+                        html += `
+                            <div style="max-height: 400px; overflow-y: auto; border: 1px solid #ddd; margin: 10px 0;">
+                                <table style="width: 100%; border-collapse: collapse; font-size: 0.9em;">
+                                    <thead style="background: #f8f9fa; position: sticky; top: 0;">
+                                        <tr>
+                                            <th style="border: 1px solid #ddd; padding: 8px; text-align: left; width: 40px;">#</th>
+                                            <th style="border: 1px solid #ddd; padding: 8px; text-align: left; width: 60px;">Bin</th>
+                                            <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Name</th>
+                                            <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Description</th>
+                                            <th style="border: 1px solid #ddd; padding: 8px; text-align: left; width: 80px;">Score</th>
+                                            <th style="border: 1px solid #ddd; padding: 8px; text-align: left; width: 60px;">Images</th>
+                                            <th style="border: 1px solid #ddd; padding: 8px; text-align: left; width: 120px;">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>`;
 
                         data.data.results.forEach((item, index) => {
+                            const relevanceScore = (item.relevance_score * 100).toFixed(1);
+                            const imageCount = item.images_count || 0;
+                            const hasImages = imageCount > 0;
+
                             html += `
-                                <div style="border: 1px solid #ddd; padding: 10px; margin: 5px 0; border-radius: 4px;">
-                                    <strong>${item.name}</strong>
-                                    <span style="background: #007bff; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.8em;">Bin ${item.bin_id}</span>
-                                    <br><em>${item.description}</em>
-                                    <br><small>Score: ${item.relevance_score} | Created: ${new Date(item.created_at).toLocaleString()}</small>
-                                </div>
-                            `;
+                                <tr style="border-bottom: 1px solid #eee;">
+                                    <td style="border: 1px solid #ddd; padding: 6px; text-align: center; font-weight: bold;">${index + 1}</td>
+                                    <td style="border: 1px solid #ddd; padding: 6px; text-align: center;">
+                                        <span style="background: #007bff; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.8em;">${item.bin_id}</span>
+                                    </td>
+                                    <td style="border: 1px solid #ddd; padding: 6px; font-weight: bold;">${item.name}</td>
+                                    <td style="border: 1px solid #ddd; padding: 6px; color: #666; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.description}">${item.description}</td>
+                                    <td style="border: 1px solid #ddd; padding: 6px; text-align: center; font-size: 0.8em; color: #666;">${relevanceScore}%</td>
+                                    <td style="border: 1px solid #ddd; padding: 6px; text-align: center;">
+                                        ${hasImages ? `<span style="background: #28a745; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.8em;">${imageCount}</span>` : `<span style="color: #999;">0</span>`}
+                                    </td>
+                                    <td style="border: 1px solid #ddd; padding: 6px; text-align: center;">
+                                        <button class="btn" style="font-size: 0.7em; padding: 3px 6px; margin: 1px;" onclick="copyToClipboard('${item.id}')" title="Copy ID">📋</button>
+                                        <button class="btn" style="font-size: 0.7em; padding: 3px 6px; margin: 1px;" onclick="loadItemImages('${item.id}', this)" title="View Images">📷</button>
+                                    </td>
+                                </tr>
+                                <tr id="images-row-${item.id}" style="display: none;">
+                                    <td colspan="7" style="border: 1px solid #ddd; padding: 10px; background: #f9f9f9;">
+                                        <div id="images-${item.id}" class="item-images"></div>
+                                    </td>
+                                </tr>`;
                         });
 
+                        html += `
+                                    </tbody>
+                                </table>
+                            </div>`;
+
                         if (data.data.pagination.has_more) {
-                            html += `<div style="margin-top: 10px;"><em>More results available. Increase offset to see more.</em></div>`;
+                            html += `<div style="margin-top: 10px; color: #666;"><em>More results available. Increase offset to see more.</em></div>`;
                         }
 
                         html += `<details style="margin-top: 15px;">
@@ -1306,18 +1464,41 @@
                     html += `<p><strong>Total Items:</strong> ${data.data.total_items}</p>`;
 
                     if (data.data.items && data.data.items.length > 0) {
-                        html += `<div style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; margin: 10px 0;">`;
+                        html += `
+                            <div style="max-height: 400px; overflow-y: auto; border: 1px solid #ddd; margin: 10px 0;">
+                                <table style="width: 100%; border-collapse: collapse; font-size: 0.9em;">
+                                    <thead style="background: #f8f9fa; position: sticky; top: 0;">
+                                        <tr>
+                                            <th style="border: 1px solid #ddd; padding: 8px; text-align: left; width: 40px;">#</th>
+                                            <th style="border: 1px solid #ddd; padding: 8px; text-align: left; width: 60px;">Bin</th>
+                                            <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Name</th>
+                                            <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Description</th>
+                                            <th style="border: 1px solid #ddd; padding: 8px; text-align: left; width: 120px;">Created</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>`;
+
                         data.data.items.forEach((item, index) => {
+                            const createdDate = new Date(item.created_at).toLocaleDateString();
+                            const createdTime = new Date(item.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
                             html += `
-                                <div style="border-bottom: 1px solid #eee; padding: 8px 0;">
-                                    <strong>${index + 1}. ${item.name}</strong>
-                                    <span style="background: #28a745; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.8em;">Bin ${item.bin_id}</span>
-                                    <br><em>${item.description}</em>
-                                    <br><small>ID: ${item.id} | Created: ${new Date(item.created_at).toLocaleString()}</small>
-                                </div>
-                            `;
+                                <tr style="border-bottom: 1px solid #eee;">
+                                    <td style="border: 1px solid #ddd; padding: 6px; text-align: center; font-weight: bold;">${index + 1}</td>
+                                    <td style="border: 1px solid #ddd; padding: 6px; text-align: center;">
+                                        <span style="background: #28a745; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.8em;">${item.bin_id}</span>
+                                    </td>
+                                    <td style="border: 1px solid #ddd; padding: 6px; font-weight: bold;">${item.name}</td>
+                                    <td style="border: 1px solid #ddd; padding: 6px; color: #666; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.description}">${item.description}</td>
+                                    <td style="border: 1px solid #ddd; padding: 6px; font-size: 0.8em; color: #666;">
+                                        ${createdDate}<br>${createdTime}
+                                    </td>
+                                </tr>`;
                         });
-                        html += `</div>`;
+
+                        html += `
+                                    </tbody>
+                                </table>
+                            </div>`;
                     }
 
                     html += `<details>
@@ -1328,6 +1509,57 @@
                     resultDiv.innerHTML = html;
                 } else {
                     resultDiv.innerHTML = `<div class="status-error">❌ Failed to List Items</div><pre>${formatResponse(data)}</pre>`;
+                }
+            } catch (error) {
+                document.getElementById('test-result').innerHTML = `<div class="status-error">❌ Connection Error</div><pre>Error: ${error.message}</pre>`;
+            }
+        }
+
+        // Clear Database with Confirmation
+        async function clearDatabase() {
+            // First confirmation
+            const firstConfirm = confirm(
+                "⚠️ WARNING: This will permanently delete ALL inventory items and images from the database!\n\n" +
+                "This action cannot be undone.\n\n" +
+                "Are you sure you want to continue?"
+            );
+
+            if (!firstConfirm) {
+                return;
+            }
+
+            // Second confirmation with typing requirement
+            const confirmText = prompt(
+                "To confirm this destructive action, please type 'DELETE ALL DATA' exactly (case sensitive):"
+            );
+
+            if (confirmText !== 'DELETE ALL DATA') {
+                alert("Confirmation text did not match. Database clear cancelled.");
+                return;
+            }
+
+            try {
+                const resultDiv = document.getElementById('test-result');
+                resultDiv.innerHTML = `<div class="status-warning">🔄 Clearing database...</div>`;
+
+                const response = await fetch(`${API_BASE}/test/clear-database`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    resultDiv.innerHTML = `
+                        <div class="status-success">✅ Database Cleared Successfully</div>
+                        <p><strong>Items Deleted:</strong> ${data.data.items_deleted || 0}</p>
+                        <p><strong>Images Deleted:</strong> ${data.data.images_deleted || 0}</p>
+                        <p><strong>Message:</strong> ${data.data.message}</p>
+                        <details>
+                            <summary>Raw Response</summary>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </details>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `<div class="status-error">❌ Failed to Clear Database</div><pre>${formatResponse(data)}</pre>`;
                 }
             } catch (error) {
                 document.getElementById('test-result').innerHTML = `<div class="status-error">❌ Connection Error</div><pre>Error: ${error.message}</pre>`;
@@ -1452,6 +1684,371 @@
             }
         });
 
+
+        // Image handling functions
+        function previewImage(input) {
+            const preview = document.getElementById('image-preview');
+            const previewImg = document.getElementById('preview-img');
+            const analyzeBtn = document.getElementById('analyze-btn');
+
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    previewImg.src = e.target.result;
+                    preview.style.display = 'block';
+                    analyzeBtn.style.display = 'inline-block';
+                };
+                reader.readAsDataURL(input.files[0]);
+            } else {
+                preview.style.display = 'none';
+                analyzeBtn.style.display = 'none';
+            }
+        }
+
+        async function uploadImage() {
+            const itemId = document.getElementById('image-item-id').value.trim();
+            const fileInput = document.getElementById('image-file');
+            const setPrimary = document.getElementById('set-primary').checked;
+            const resultDiv = document.getElementById('image-result');
+
+            if (!itemId) {
+                resultDiv.innerHTML = '<div class="status-error">❌ Please enter an Item ID</div>';
+                return;
+            }
+
+            if (!fileInput.files || !fileInput.files[0]) {
+                resultDiv.innerHTML = '<div class="status-error">❌ Please select an image file</div>';
+                return;
+            }
+
+            try {
+                resultDiv.innerHTML = '<div class="status-loading">⏳ Uploading image...</div>';
+
+                const formData = new FormData();
+                formData.append('file', fileInput.files[0]);
+                formData.append('item_id', itemId);
+                formData.append('set_as_primary', setPrimary);
+
+                const response = await fetch(`${API_BASE}/images/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    resultDiv.innerHTML = `
+                        <div class="status-success">✅ Image uploaded successfully!</div>
+                        <div><strong>Image ID:</strong> ${data.data.image_id}</div>
+                        <div><strong>Primary:</strong> ${data.data.set_as_primary ? 'Yes' : 'No'}</div>
+                    `;
+
+                    // Clear form
+                    document.getElementById('image-item-id').value = '';
+                    fileInput.value = '';
+                    document.getElementById('set-primary').checked = false;
+                    document.getElementById('image-preview').style.display = 'none';
+                    document.getElementById('analyze-btn').style.display = 'none';
+                } else {
+                    resultDiv.innerHTML = `<div class="status-error">❌ Upload failed</div><pre>${formatResponse(data)}</pre>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="status-error">❌ Connection Error</div><pre>Error: ${error.message}</pre>`;
+            }
+        }
+
+        async function analyzeImage() {
+            const fileInput = document.getElementById('image-file');
+            const resultDiv = document.getElementById('image-result');
+
+            if (!fileInput.files || !fileInput.files[0]) {
+                resultDiv.innerHTML = '<div class="status-error">❌ Please select an image file first</div>';
+                return;
+            }
+
+            // First upload the image to a temporary location for analysis
+            // For now, show a message that analysis requires upload first
+            resultDiv.innerHTML = `
+                <div class="status-info">ℹ️ To analyze this image:</div>
+                <div>1. First upload the image to an item</div>
+                <div>2. Then use the analyze function from search results</div>
+            `;
+        }
+
+        async function analyzeUploadedImage(imageId) {
+            try {
+                const response = await fetch(`${API_BASE}/images/analyze/${imageId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    const analysis = data.data.analysis;
+                    return `
+                        <div class="status-success">🔍 AI Analysis Results:</div>
+                        <div><strong>Item:</strong> ${analysis.item_name || 'Unknown'}</div>
+                        <div><strong>Description:</strong> ${analysis.description || 'No description'}</div>
+                        <div><strong>Category:</strong> ${analysis.category || 'Unknown'}</div>
+                        <div><strong>Confidence:</strong> ${analysis.confidence || 0}/10</div>
+                        ${analysis.characteristics ? `<div><strong>Features:</strong> ${analysis.characteristics.join(', ')}</div>` : ''}
+                    `;
+                } else {
+                    return `<div class="status-error">❌ Analysis failed: ${data.error?.message || 'Unknown error'}</div>`;
+                }
+            } catch (error) {
+                return `<div class="status-error">❌ Analysis error: ${error.message}</div>`;
+            }
+        }
+
+        async function getItemImages(itemId) {
+            try {
+                const response = await fetch(`${API_BASE}/images/item/${itemId}`);
+                const data = await response.json();
+
+                if (data.success && data.data.images.length > 0) {
+                    let imagesHtml = '<div class="image-gallery">';
+
+                    for (const image of data.data.images) {
+                        const isPrimary = image.image_id === data.data.primary_image;
+                        imagesHtml += `
+                            <div class="image-thumbnail ${isPrimary ? 'primary' : ''}" onclick="showImageModal('${image.image_id}')">
+                                <img src="${API_BASE}/images/file/${image.image_id}?size=small" alt="Item image">
+                                <div class="image-actions">
+                                    ${isPrimary ? '⭐' : ''}
+                                    <span onclick="event.stopPropagation(); deleteImage('${image.image_id}')" style="cursor: pointer; margin-left: 5px;">🗑️</span>
+                                </div>
+                            </div>
+                        `;
+                    }
+
+                    imagesHtml += '</div>';
+                    return imagesHtml;
+                } else {
+                    return '<div class="status-info">📷 No images for this item</div>';
+                }
+            } catch (error) {
+                return `<div class="status-error">❌ Error loading images: ${error.message}</div>`;
+            }
+        }
+
+        function showImageModal(imageId) {
+            // Create modal if it doesn't exist
+            let modal = document.getElementById('image-modal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'image-modal';
+                modal.className = 'modal';
+                modal.innerHTML = `
+                    <div class="modal-content">
+                        <span class="close" onclick="closeImageModal()">&times;</span>
+                        <img id="modal-image" style="width: 100%; max-height: 70vh; object-fit: contain;">
+                        <div id="modal-actions" style="margin-top: 10px; text-align: center;">
+                            <button class="btn btn-primary" onclick="analyzeModalImage()">🔍 Analyze</button>
+                            <button class="btn btn-secondary" onclick="setPrimaryImage()">⭐ Set Primary</button>
+                            <button class="btn btn-danger" onclick="deleteModalImage()">🗑️ Delete</button>
+                        </div>
+                        <div id="modal-result" class="result"></div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+            }
+
+            // Set image source and show modal
+            document.getElementById('modal-image').src = `${API_BASE}/images/file/${imageId}`;
+            modal.dataset.imageId = imageId;
+            modal.style.display = 'block';
+        }
+
+        function closeImageModal() {
+            document.getElementById('image-modal').style.display = 'none';
+        }
+
+        async function analyzeModalImage() {
+            const modal = document.getElementById('image-modal');
+            const imageId = modal.dataset.imageId;
+            const resultDiv = document.getElementById('modal-result');
+
+            resultDiv.innerHTML = '<div class="status-loading">⏳ Analyzing image...</div>';
+
+            const analysisHtml = await analyzeUploadedImage(imageId);
+            resultDiv.innerHTML = analysisHtml;
+        }
+
+        async function deleteImage(imageId) {
+            if (!confirm('Are you sure you want to delete this image?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/images/${imageId}`, {
+                    method: 'DELETE'
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // Refresh the current view
+                    location.reload();
+                } else {
+                    alert(`Failed to delete image: ${data.error?.message || 'Unknown error'}`);
+                }
+            } catch (error) {
+                alert(`Error deleting image: ${error.message}`);
+            }
+        }
+
+        // Smart Image Upload Functions
+        function previewSmartImage() {
+            const fileInput = document.getElementById('smart-image-file');
+            const preview = document.getElementById('smart-image-preview');
+            const previewImg = document.getElementById('smart-preview-img');
+
+            if (fileInput.files && fileInput.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    previewImg.src = e.target.result;
+                    preview.style.display = 'block';
+                };
+                reader.readAsDataURL(fileInput.files[0]);
+            } else {
+                preview.style.display = 'none';
+            }
+        }
+
+        async function uploadImageToBin() {
+            const binId = document.getElementById('smart-bin-id').value.trim();
+            const fileInput = document.getElementById('smart-image-file');
+            const autoAnalyze = document.getElementById('auto-analyze').checked;
+            const resultDiv = document.getElementById('smart-image-result');
+
+            if (!binId) {
+                resultDiv.innerHTML = '<div class="status-error">❌ Please enter a bin ID</div>';
+                return;
+            }
+
+            if (!fileInput.files || !fileInput.files[0]) {
+                resultDiv.innerHTML = '<div class="status-error">❌ Please select an image file</div>';
+                return;
+            }
+
+            try {
+                resultDiv.innerHTML = '<div class="status-loading">⏳ Uploading and analyzing image...</div>';
+
+                const formData = new FormData();
+                formData.append('file', fileInput.files[0]);
+                formData.append('bin_id', binId);
+                formData.append('auto_analyze', autoAnalyze);
+
+                const response = await fetch(`${API_BASE}/images/upload-to-bin`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    let resultHtml = `<div class="status-success">✅ Image uploaded successfully!</div>`;
+                    resultHtml += `<div><strong>Image ID:</strong> ${data.data.image_id}</div>`;
+                    resultHtml += `<div><strong>Bin:</strong> ${data.data.bin_id}</div>`;
+
+                    if (data.data.items_created && data.data.items_created.length > 0) {
+                        resultHtml += `<div class="status-success">🤖 AI Analysis Complete!</div>`;
+                        data.data.items_created.forEach(item => {
+                            resultHtml += `
+                                <div style="border: 1px solid #28a745; padding: 10px; margin: 5px 0; border-radius: 4px; background: #f8fff8;">
+                                    <div><strong>Created Item:</strong> ${item.name}</div>
+                                    <div><strong>Description:</strong> ${item.description}</div>
+                                    <div><strong>Category:</strong> ${item.category}</div>
+                                    <div><strong>Confidence:</strong> ${item.confidence}/10</div>
+                                    <div><strong>Item ID:</strong> <span onclick="copyToClipboard('${item.id}')" style="cursor: pointer; color: #007bff; text-decoration: underline;">${item.id}</span></div>
+                                </div>
+                            `;
+                        });
+                    } else if (autoAnalyze) {
+                        resultHtml += `<div class="status-warning">⚠️ Auto-analysis was enabled but no items were created</div>`;
+                        if (data.data.analysis_error) {
+                            resultHtml += `<div><strong>Analysis Error:</strong> ${data.data.analysis_error}</div>`;
+                        }
+                    }
+
+                    resultDiv.innerHTML = resultHtml;
+
+                    // Clear form
+                    document.getElementById('smart-bin-id').value = '';
+                    fileInput.value = '';
+                    document.getElementById('smart-image-preview').style.display = 'none';
+                } else {
+                    resultDiv.innerHTML = `<div class="status-error">❌ Upload failed</div><pre>${formatResponse(data)}</pre>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="status-error">❌ Connection Error</div><pre>Error: ${error.message}</pre>`;
+            }
+        }
+
+        // Helper functions
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                // Show temporary feedback
+                const originalText = event.target.textContent;
+                event.target.textContent = '✅ Copied!';
+                setTimeout(() => {
+                    event.target.textContent = originalText;
+                }, 1000);
+            }).catch(err => {
+                console.error('Failed to copy: ', err);
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+
+                const originalText = event.target.textContent;
+                event.target.textContent = '✅ Copied!';
+                setTimeout(() => {
+                    event.target.textContent = originalText;
+                }, 1000);
+            });
+        }
+
+        async function loadItemImages(itemId, button) {
+            const imagesDiv = document.getElementById(`images-${itemId}`);
+            const imagesRow = document.getElementById(`images-row-${itemId}`);
+
+            if (imagesDiv.innerHTML.trim() !== '') {
+                // Toggle visibility of the entire row
+                if (imagesRow.style.display === 'none' || imagesRow.style.display === '') {
+                    imagesRow.style.display = 'table-row';
+                    button.textContent = '📷';
+                    button.title = 'Hide Images';
+                } else {
+                    imagesRow.style.display = 'none';
+                    button.textContent = '📷';
+                    button.title = 'View Images';
+                }
+                return;
+            }
+
+            try {
+                button.textContent = '⏳';
+                button.title = 'Loading...';
+                const imagesHtml = await getItemImages(itemId);
+                imagesDiv.innerHTML = imagesHtml;
+                imagesRow.style.display = 'table-row';
+                button.textContent = '📷';
+                button.title = 'Hide Images';
+            } catch (error) {
+                imagesDiv.innerHTML = `<div class="status-error">❌ Error loading images: ${error.message}</div>`;
+                imagesRow.style.display = 'table-row';
+                button.textContent = '📷';
+                button.title = 'View Images';
+            }
+        }
 
         // Auto-load health check on page load
         document.addEventListener('DOMContentLoaded', function() {

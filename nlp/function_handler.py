@@ -28,9 +28,10 @@ class FunctionCallResult:
 class FunctionCallHandler:
     """Handles execution of OpenAI function calls for inventory operations"""
 
-    def __init__(self, db_client, embedding_service):
+    def __init__(self, db_client, embedding_service, vision_service=None):
         self.db_client = db_client
         self.embedding_service = embedding_service
+        self.vision_service = vision_service
         self.supported_functions = set(get_all_function_names())
     
     async def execute_function_call(self, function_name: str, parameters: Dict[str, Any]) -> FunctionCallResult:
@@ -65,6 +66,14 @@ class FunctionCallHandler:
                 return await self._handle_search_items(parameters)
             elif function_name == "list_bin_contents":
                 return await self._handle_list_bin(parameters)
+            elif function_name == "add_items_from_image":
+                return await self._handle_add_items_from_image(parameters)
+            elif function_name == "analyze_image":
+                return await self._handle_analyze_image(parameters)
+            elif function_name == "search_by_image":
+                return await self._handle_search_by_image(parameters)
+            elif function_name == "describe_image":
+                return await self._handle_describe_image(parameters)
             else:
                 return FunctionCallResult(
                     success=False,
@@ -99,6 +108,7 @@ class FunctionCallHandler:
             # Prepare items with embeddings (like the real add API does)
             prepared_items = []
             failed_items = []
+            added_items = []
 
             # First pass: validate and prepare all items with embeddings
             for item_name in items:
@@ -488,6 +498,249 @@ class FunctionCallHandler:
                 parameters=parameters
             )
 
+    async def _handle_add_items_from_image(self, parameters: Dict[str, Any]) -> FunctionCallResult:
+        """Handle adding items from image analysis"""
+        try:
+            bin_id = parameters.get("bin_id")
+            image_description = parameters.get("image_description", "")
+
+            if not bin_id:
+                return FunctionCallResult(
+                    success=False,
+                    error="Bin ID is required",
+                    function_name="add_items_from_image",
+                    parameters=parameters
+                )
+
+            # This function is designed to work with the frontend image upload
+            # For now, return instructions for the user
+            return FunctionCallResult(
+                success=True,
+                data={
+                    "message": f"To add items from an image to bin {bin_id}, please use the image upload feature in the web interface. Upload your image and the system will automatically analyze it and add the identified items to the bin.",
+                    "bin_id": bin_id,
+                    "description": image_description,
+                    "instructions": [
+                        "1. Go to the image upload section",
+                        "2. Select your image file",
+                        f"3. Choose bin {bin_id} as the destination",
+                        "4. Enable auto-analysis",
+                        "5. Upload the image"
+                    ]
+                },
+                function_name="add_items_from_image",
+                parameters=parameters
+            )
+
+        except Exception as e:
+            logger.error(f"Error in add_items_from_image function: {e}")
+            return FunctionCallResult(
+                success=False,
+                error=f"Error processing image request: {str(e)}",
+                function_name="add_items_from_image",
+                parameters=parameters
+            )
+
+    async def _handle_analyze_image(self, parameters: Dict[str, Any]) -> FunctionCallResult:
+        """Handle image analysis using Vision API"""
+        try:
+            if not self.vision_service:
+                return FunctionCallResult(
+                    success=False,
+                    error="Vision service not available",
+                    function_name="analyze_image",
+                    parameters=parameters
+                )
+
+            image_id = parameters.get("image_id")
+            context = parameters.get("context")
+
+            if not image_id:
+                return FunctionCallResult(
+                    success=False,
+                    error="Image ID is required",
+                    function_name="analyze_image",
+                    parameters=parameters
+                )
+
+            # Get image path from storage
+            from storage.image_storage import ImageStorage
+            image_storage = ImageStorage()
+            image_path = image_storage.get_image_path(image_id, "full")
+
+            if not image_path:
+                return FunctionCallResult(
+                    success=False,
+                    error=f"Image {image_id} not found",
+                    function_name="analyze_image",
+                    parameters=parameters
+                )
+
+            # Analyze image
+            analysis_result = self.vision_service.identify_item(image_path, context)
+
+            if not analysis_result.get("success", False):
+                return FunctionCallResult(
+                    success=False,
+                    error=analysis_result.get("error", "Analysis failed"),
+                    function_name="analyze_image",
+                    parameters=parameters
+                )
+
+            return FunctionCallResult(
+                success=True,
+                data=analysis_result,
+                function_name="analyze_image",
+                parameters=parameters
+            )
+
+        except Exception as e:
+            logger.error(f"Error in analyze_image function: {e}")
+            return FunctionCallResult(
+                success=False,
+                error=f"Error analyzing image: {str(e)}",
+                function_name="analyze_image",
+                parameters=parameters
+            )
+
+    async def _handle_search_by_image(self, parameters: Dict[str, Any]) -> FunctionCallResult:
+        """Handle search by image using Vision API"""
+        try:
+            if not self.vision_service:
+                return FunctionCallResult(
+                    success=False,
+                    error="Vision service not available",
+                    function_name="search_by_image",
+                    parameters=parameters
+                )
+
+            image_id = parameters.get("image_id")
+            additional_query = parameters.get("additional_query")
+
+            if not image_id:
+                return FunctionCallResult(
+                    success=False,
+                    error="Image ID is required",
+                    function_name="search_by_image",
+                    parameters=parameters
+                )
+
+            # Get image path from storage
+            from storage.image_storage import ImageStorage
+            image_storage = ImageStorage()
+            image_path = image_storage.get_image_path(image_id, "full")
+
+            if not image_path:
+                return FunctionCallResult(
+                    success=False,
+                    error=f"Image {image_id} not found",
+                    function_name="search_by_image",
+                    parameters=parameters
+                )
+
+            # Generate search terms
+            search_result = self.vision_service.search_by_image(image_path, additional_query)
+
+            if not search_result.get("success", False):
+                return FunctionCallResult(
+                    success=False,
+                    error=search_result.get("error", "Search term generation failed"),
+                    function_name="search_by_image",
+                    parameters=parameters
+                )
+
+            # Use the suggested query to search inventory
+            suggested_query = search_result.get("suggested_query", "")
+            if suggested_query:
+                search_params = {"query": suggested_query, "limit": 10}
+                inventory_search = await self._handle_search_items(search_params)
+
+                # Combine vision results with inventory search
+                result_data = {
+                    "vision_analysis": search_result,
+                    "inventory_search": inventory_search.data if inventory_search.success else None,
+                    "suggested_query": suggested_query
+                }
+            else:
+                result_data = {"vision_analysis": search_result}
+
+            return FunctionCallResult(
+                success=True,
+                data=result_data,
+                function_name="search_by_image",
+                parameters=parameters
+            )
+
+        except Exception as e:
+            logger.error(f"Error in search_by_image function: {e}")
+            return FunctionCallResult(
+                success=False,
+                error=f"Error searching by image: {str(e)}",
+                function_name="search_by_image",
+                parameters=parameters
+            )
+
+    async def _handle_describe_image(self, parameters: Dict[str, Any]) -> FunctionCallResult:
+        """Handle image description for accessibility"""
+        try:
+            if not self.vision_service:
+                return FunctionCallResult(
+                    success=False,
+                    error="Vision service not available",
+                    function_name="describe_image",
+                    parameters=parameters
+                )
+
+            image_id = parameters.get("image_id")
+
+            if not image_id:
+                return FunctionCallResult(
+                    success=False,
+                    error="Image ID is required",
+                    function_name="describe_image",
+                    parameters=parameters
+                )
+
+            # Get image path from storage
+            from storage.image_storage import ImageStorage
+            image_storage = ImageStorage()
+            image_path = image_storage.get_image_path(image_id, "full")
+
+            if not image_path:
+                return FunctionCallResult(
+                    success=False,
+                    error=f"Image {image_id} not found",
+                    function_name="describe_image",
+                    parameters=parameters
+                )
+
+            # Generate description
+            description_result = self.vision_service.describe_for_accessibility(image_path)
+
+            if not description_result.get("success", False):
+                return FunctionCallResult(
+                    success=False,
+                    error=description_result.get("error", "Description generation failed"),
+                    function_name="describe_image",
+                    parameters=parameters
+                )
+
+            return FunctionCallResult(
+                success=True,
+                data=description_result,
+                function_name="describe_image",
+                parameters=parameters
+            )
+
+        except Exception as e:
+            logger.error(f"Error in describe_image function: {e}")
+            return FunctionCallResult(
+                success=False,
+                error=f"Error describing image: {str(e)}",
+                function_name="describe_image",
+                parameters=parameters
+            )
+
     def format_function_result_for_user(self, result: FunctionCallResult) -> str:
         """
         Format a function call result into a user-friendly message.
@@ -546,5 +799,74 @@ class FunctionCallHandler:
             
             items_list = [f"• {item.get('name', 'Unknown')}" for item in items]
             return f"📦 Bin {bin_id} contains {len(items)} items:\n" + "\n".join(items_list)
-        
+
+        elif result.function_name == "add_items_from_image":
+            bin_id = result.parameters.get("bin_id")
+            description = result.parameters.get("image_description", "")
+
+            response = f"📷 **Add Items from Image to Bin {bin_id}**\n\n"
+            response += result.data.get("message", "")
+
+            if result.data.get("instructions"):
+                response += "\n\n**Steps:**\n"
+                for instruction in result.data["instructions"]:
+                    response += f"{instruction}\n"
+
+            return response
+
+        elif result.function_name == "analyze_image":
+            image_id = result.parameters.get("image_id")
+            analysis = result.data
+
+            item_name = analysis.get("item_name", "Unknown item")
+            description = analysis.get("description", "No description available")
+            confidence = analysis.get("confidence", 0)
+            category = analysis.get("category", "Unknown")
+
+            response = f"🔍 **Image Analysis Results:**\n"
+            response += f"**Item:** {item_name}\n"
+            response += f"**Description:** {description}\n"
+            response += f"**Category:** {category}\n"
+            response += f"**Confidence:** {confidence}/10"
+
+            if analysis.get("characteristics"):
+                features = ", ".join(analysis["characteristics"])
+                response += f"\n**Features:** {features}"
+
+            return response
+
+        elif result.function_name == "search_by_image":
+            image_id = result.parameters.get("image_id")
+            vision_analysis = result.data.get("vision_analysis", {})
+            inventory_search = result.data.get("inventory_search")
+            suggested_query = result.data.get("suggested_query", "")
+
+            response = f"🔍 **Image Search Results:**\n"
+
+            if suggested_query:
+                response += f"**Generated search terms:** {suggested_query}\n\n"
+
+            if inventory_search and inventory_search.get("items"):
+                items = inventory_search["items"]
+                response += f"**Found {len(items)} matching items:**\n"
+                for item in items[:5]:  # Show top 5 results
+                    response += f"• {item.get('name', 'Unknown')} (Bin {item.get('bin_id', '?')})\n"
+                if len(items) > 5:
+                    response += f"... and {len(items) - 5} more items\n"
+            else:
+                response += "**No matching items found in inventory**\n"
+
+            # Add vision analysis details
+            if vision_analysis.get("primary_terms"):
+                terms = ", ".join(vision_analysis["primary_terms"])
+                response += f"\n**AI identified terms:** {terms}"
+
+            return response
+
+        elif result.function_name == "describe_image":
+            image_id = result.parameters.get("image_id")
+            description = result.data.get("description", "No description available")
+
+            return f"📷 **Image Description:**\n{description}"
+
         return "✅ Operation completed successfully"

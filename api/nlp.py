@@ -22,13 +22,15 @@ from nlp.function_command_processor import FunctionCommandProcessor
 db_client = None
 embedding_service = None
 llm_client = None
+vision_service = None
 
-def set_dependencies(db, embedding, llm=None):
-    """Set the database, embedding service, and LLM client dependencies"""
-    global db_client, embedding_service, llm_client
+def set_dependencies(db, embedding, llm=None, vision=None):
+    """Set the database, embedding service, LLM client, and vision service dependencies"""
+    global db_client, embedding_service, llm_client, vision_service
     db_client = db
     embedding_service = embedding
     llm_client = llm
+    vision_service = vision
 
 router = APIRouter(prefix="/nlp", tags=["Natural Language Processing"])
 
@@ -75,7 +77,8 @@ async def process_natural_language_command(request: NLPCommandRequest):
         processor = FunctionCommandProcessor(
             db_client=db_client,
             embedding_service=embedding_service,
-            llm_client=llm_client
+            llm_client=llm_client,
+            vision_service=vision_service
         )
         
         # Process the command

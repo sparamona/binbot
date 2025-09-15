@@ -139,6 +139,91 @@ def get_inventory_functions() -> List[Dict[str, Any]]:
                     "additionalProperties": False
                 }
             }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "add_items_from_image",
+                "description": "Upload an image to a bin and automatically identify and add items from the image",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "bin_id": {
+                            "type": "string",
+                            "description": "The ID/number of the bin to add items to (e.g., '3', '5', '12')",
+                            "pattern": "^[0-9]+$"
+                        },
+                        "image_description": {
+                            "type": "string",
+                            "description": "Description of what the user wants to add from the image (e.g., 'the screws in this image', 'these tools')"
+                        }
+                    },
+                    "required": ["bin_id", "image_description"],
+                    "additionalProperties": False
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "analyze_image",
+                "description": "Analyze an image using AI vision to identify what item it shows",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "image_id": {
+                            "type": "string",
+                            "description": "The ID of the image to analyze"
+                        },
+                        "context": {
+                            "type": "string",
+                            "description": "Optional context about where the item is located (e.g., 'bin 3')"
+                        }
+                    },
+                    "required": ["image_id"],
+                    "additionalProperties": False
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "search_by_image",
+                "description": "Generate search terms based on image content to find similar items",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "image_id": {
+                            "type": "string",
+                            "description": "The ID of the image to use for search"
+                        },
+                        "additional_query": {
+                            "type": "string",
+                            "description": "Optional additional search context or terms"
+                        }
+                    },
+                    "required": ["image_id"],
+                    "additionalProperties": False
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "describe_image",
+                "description": "Get a detailed description of an image for accessibility or understanding",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "image_id": {
+                            "type": "string",
+                            "description": "The ID of the image to describe"
+                        }
+                    },
+                    "required": ["image_id"],
+                    "additionalProperties": False
+                }
+            }
         }
     ]
 

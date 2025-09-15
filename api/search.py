@@ -1,17 +1,20 @@
 from fastapi import APIRouter, Query
 from api_schemas import StandardResponse, ErrorDetail
 from database.chromadb_client import ChromaDBClient
+from llm.embeddings import EmbeddingService
 
 router = APIRouter(tags=["search"])
 
-# This will be injected by the main app
+# These will be injected by the main app
 db_client: ChromaDBClient = None
+embedding_service: EmbeddingService = None
 
 
-def set_dependencies(db: ChromaDBClient):
+def set_dependencies(db: ChromaDBClient, embeddings: EmbeddingService):
     """Set dependencies for the search router"""
-    global db_client
+    global db_client, embedding_service
     db_client = db
+    embedding_service = embeddings
 
 
 @router.get("/search", response_model=StandardResponse)
@@ -35,7 +38,7 @@ async def search_inventory(
             )
 
         # Perform search
-        search_results = db_client.search_documents(q, limit, offset, min_relevance)
+        search_results = db_client.search_documents(q, limit, offset, min_relevance, embedding_service)
 
         return StandardResponse(
             success=True,

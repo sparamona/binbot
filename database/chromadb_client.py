@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional, List
 import chromadb
 from chromadb.config import Settings
+from config.embeddings import DEFAULT_EMBEDDING_DIMENSION, get_model_info
 
 
 class ChromaDBClient:
@@ -44,7 +45,7 @@ class ChromaDBClient:
                 # Check if collection has correct embedding dimension
                 # Test with a dummy embedding to see if dimensions match
                 try:
-                    test_embedding = [0.0] * 1536  # OpenAI embedding size
+                    test_embedding = [0.0] * DEFAULT_EMBEDDING_DIMENSION
                     # Try to add a test document to check dimensions
                     self.inventory_collection.add(
                         documents=["dimension_test"],
@@ -142,25 +143,30 @@ class ChromaDBClient:
             print(f"Error getting collection stats: {e}")
             return {"error": str(e)}
     
-    def add_document(self, name: str, bin_id: str, description: str, embedding: List[float]) -> bool:
-        """Add a document to the inventory collection"""
+    def add_document(self, name: str, bin_id: str, description: str, embedding: List[float]) -> str:
+        """Add a document to the inventory collection and return the document ID"""
         try:
             if self.inventory_collection is None:
                 print("Inventory collection not initialized")
-                return False
+                return None
 
             doc_id = str(uuid.uuid4())
             document_text = f"{name} - {description}"
 
-            # Determine embedding model version
-            embedding_model = "openai" if len(embedding) == 1536 else "hash-fallback-v1"
+            # Determine embedding model version using centralized config
+            model_info = get_model_info(len(embedding))
+            embedding_model = model_info["name"]
 
             metadata = {
                 "name": name,
                 "bin_id": bin_id,
                 "description": description,
                 "created_at": datetime.now().isoformat(),
-                "embedding_model": embedding_model
+                "updated_at": datetime.now().isoformat(),
+                "embedding_model": embedding_model,
+                "images_count": 0,  # Store count instead of list
+                "images_json": "",  # Store as comma-separated string
+                "primary_image": ""  # Store empty string instead of None
             }
 
             self.inventory_collection.add(
@@ -171,11 +177,11 @@ class ChromaDBClient:
             )
 
             print(f"Added document: {name} (ID: {doc_id})")
-            return True
+            return doc_id
 
         except Exception as e:
             print(f"Error adding document: {e}")
-            return False
+            return None
 
     def add_documents_bulk(self, items: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Add multiple documents in a single transaction with rollback capability"""
@@ -194,15 +200,24 @@ class ChromaDBClient:
                 doc_id = str(uuid.uuid4())
                 document_text = f"{item['name']} - {item['description']}"
 
-                # Determine embedding model version
-                embedding_model = "openai" if len(item['embedding']) == 1536 else "hash-fallback-v1"
+                # Determine embedding model version using centralized config
+                model_info = get_model_info(len(item['embedding']))
+                embedding_model = model_info["name"]
+
+                # Convert image data to ChromaDB-compatible format
+                images_list = item.get('images', [])
+                primary_image = item.get('primary_image', None)
 
                 metadata = {
                     "name": item['name'],
                     "bin_id": item['bin_id'],
                     "description": item['description'],
                     "created_at": datetime.now().isoformat(),
-                    "embedding_model": embedding_model
+                    "updated_at": datetime.now().isoformat(),
+                    "embedding_model": embedding_model,
+                    "images_count": len(images_list),  # Store count instead of list
+                    "images_json": ",".join(images_list) if images_list else "",  # Store as comma-separated string
+                    "primary_image": primary_image if primary_image else ""  # Store empty string instead of None
                 }
 
                 doc_ids.append(doc_id)
@@ -281,18 +296,16 @@ class ChromaDBClient:
             print(f"Error adding audit log entry: {e}")
             return False
     
-    def search_documents(self, query: str, limit: int = 10, offset: int = 0, min_relevance: float = 0.6) -> Dict[str, Any]:
+    def search_documents(self, query: str, limit: int = 10, offset: int = 0, min_relevance: float = 0.6, embedding_service=None) -> Dict[str, Any]:
         """Search documents in the inventory collection using semantic similarity"""
         try:
             if self.inventory_collection is None:
                 raise Exception("Inventory collection not initialized")
 
-            # Try semantic search first if we have an LLM client for embeddings
-            if hasattr(self, 'llm_client') and self.llm_client:
+            # Try semantic search first if we have an embedding service
+            if embedding_service:
                 try:
                     # Generate embedding for the search query
-                    from llm.embeddings import EmbeddingService
-                    embedding_service = EmbeddingService(self.llm_client)
                     query_embedding = embedding_service.generate_embedding(query)
 
                     if query_embedding:
@@ -325,13 +338,21 @@ class ChromaDBClient:
 
                                 # Filter by minimum relevance score
                                 if relevance_score >= min_relevance:
+                                    # Parse images from ChromaDB format
+                                    images_json = metadata.get('images_json', '')
+                                    images = images_json.split(',') if images_json else []
+                                    images = [img.strip() for img in images if img.strip()]  # Clean up
+
                                     matching_items.append({
                                         "id": ids[i],
                                         "name": metadata.get('name', ''),
                                         "description": metadata.get('description', ''),
                                         "bin_id": metadata.get('bin_id', ''),
                                         "created_at": metadata.get('created_at', ''),
-                                        "relevance_score": relevance_score
+                                        "relevance_score": relevance_score,
+                                        "images": images,
+                                        "primary_image": metadata.get('primary_image', ''),
+                                        "images_count": len(images)
                                     })
 
                             total_results = len(ids)
@@ -344,52 +365,10 @@ class ChromaDBClient:
                             }
 
                 except Exception as e:
-                    print(f"Semantic search failed, falling back to text search: {e}")
-
-            # Fallback to simple text matching if semantic search fails
-            all_results = self.inventory_collection.get(
-                include=['metadatas', 'documents']
-            )
-
-            matching_items = []
-            query_lower = query.lower()
-
-            for i in range(len(all_results['ids'])):
-                metadata = all_results['metadatas'][i] if all_results['metadatas'] else {}
-                document = all_results['documents'][i] if all_results['documents'] else ""
-
-                # Check if query matches name, description, or document text
-                name = metadata.get('name', '').lower()
-                description = metadata.get('description', '').lower()
-                document_lower = document.lower()
-
-                if (query_lower in name or
-                    query_lower in description or
-                    query_lower in document_lower):
-
-                    relevance_score = 1.0  # Simple matching - all matches have same score
-
-                    # Filter by minimum relevance score
-                    if relevance_score >= min_relevance:
-                        matching_items.append({
-                            "id": all_results['ids'][i],
-                            "name": metadata.get('name', ''),
-                            "description": metadata.get('description', ''),
-                            "bin_id": metadata.get('bin_id', ''),
-                            "created_at": metadata.get('created_at', ''),
-                            "relevance_score": relevance_score
-                        })
-
-            # Apply pagination
-            total_results = len(matching_items)
-            paginated_results = matching_items[offset:offset + limit]
-            has_more = offset + limit < total_results
-
-            return {
-                "total_results": total_results,
-                "results": paginated_results,
-                "has_more": has_more
-            }
+                    print(f"Semantic search failed: {e}")
+                    raise e
+            else:
+                raise Exception("Embedding service is required for search functionality")
 
         except Exception as e:
             print(f"Error searching documents: {e}")
@@ -448,3 +427,125 @@ class ChromaDBClient:
         except Exception as e:
             print(f"Error updating document metadata {document_id}: {e}")
             return False
+
+    def add_image_to_item(self, item_id: str, image_id: str, set_as_primary: bool = False) -> bool:
+        """Add an image ID to an item's image list"""
+        try:
+            # Get current item data
+            result = self.inventory_collection.get(
+                ids=[item_id],
+                include=['metadatas']
+            )
+
+            if not result['ids'] or len(result['ids']) == 0:
+                print(f"Item {item_id} not found")
+                return False
+
+            current_metadata = result['metadatas'][0]
+
+            # Parse current images from ChromaDB format
+            images_json = current_metadata.get('images_json', '')
+            images = images_json.split(',') if images_json else []
+            images = [img.strip() for img in images if img.strip()]  # Clean up
+
+            # Add image ID if not already present
+            if image_id not in images:
+                images.append(image_id)
+
+            # Set as primary image if requested or if it's the first image
+            primary_image = current_metadata.get('primary_image', '')
+            if set_as_primary or not primary_image:
+                primary_image = image_id
+
+            # Update metadata in ChromaDB-compatible format
+            updates = {
+                'images_count': len(images),
+                'images_json': ','.join(images),
+                'primary_image': primary_image,
+                'updated_at': datetime.now().isoformat()
+            }
+
+            return self.update_document_metadata(item_id, updates)
+
+        except Exception as e:
+            print(f"Error adding image {image_id} to item {item_id}: {e}")
+            return False
+
+    def remove_image_from_item(self, item_id: str, image_id: str) -> bool:
+        """Remove an image ID from an item's image list"""
+        try:
+            # Get current item data
+            result = self.inventory_collection.get(
+                ids=[item_id],
+                include=['metadatas']
+            )
+
+            if not result['ids'] or len(result['ids']) == 0:
+                print(f"Item {item_id} not found")
+                return False
+
+            current_metadata = result['metadatas'][0]
+
+            # Parse current images from ChromaDB format
+            images_json = current_metadata.get('images_json', '')
+            images = images_json.split(',') if images_json else []
+            images = [img.strip() for img in images if img.strip()]  # Clean up
+
+            primary_image = current_metadata.get('primary_image', '')
+
+            # Remove image ID if present
+            if image_id in images:
+                images.remove(image_id)
+
+            # Update primary image if it was the removed image
+            if primary_image == image_id:
+                primary_image = images[0] if images else ""
+
+            # Update metadata in ChromaDB-compatible format
+            updates = {
+                'images_count': len(images),
+                'images_json': ','.join(images),
+                'primary_image': primary_image,
+                'updated_at': datetime.now().isoformat()
+            }
+
+            return self.update_document_metadata(item_id, updates)
+
+        except Exception as e:
+            print(f"Error removing image {image_id} from item {item_id}: {e}")
+            return False
+
+    def get_items_with_images(self) -> List[Dict[str, Any]]:
+        """Get all items that have associated images"""
+        try:
+            if self.inventory_collection is None:
+                return []
+
+            # Get all items
+            all_results = self.inventory_collection.get(
+                include=['metadatas']
+            )
+
+            items_with_images = []
+            for i, item_id in enumerate(all_results['ids']):
+                metadata = all_results['metadatas'][i]
+
+                # Parse images from ChromaDB format
+                images_json = metadata.get('images_json', '')
+                images = images_json.split(',') if images_json else []
+                images = [img.strip() for img in images if img.strip()]  # Clean up
+
+                if images:  # Item has images
+                    items_with_images.append({
+                        'item_id': item_id,
+                        'name': metadata.get('name', ''),
+                        'bin_id': metadata.get('bin_id', ''),
+                        'images': images,
+                        'primary_image': metadata.get('primary_image', '')
+                    })
+
+            return items_with_images
+
+        except Exception as e:
+            print(f"Error getting items with images: {e}")
+            return []

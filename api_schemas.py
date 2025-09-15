@@ -33,6 +33,11 @@ class AddItemRequest(BaseModel):
     bin_id: str = Field(..., description="Bin ID where items should be added")
     bulk_transaction_id: Optional[str] = None
 
+class AddItemWithImageRequest(BaseModel):
+    items: List[str] = Field(..., description="List of item names to add")
+    bin_id: str = Field(..., description="Bin ID where items should be added")
+    bulk_transaction_id: Optional[str] = None
+
 class RemoveItemRequest(BaseModel):
     query: str = Field(..., description="Description of item to remove")
     item_ids: Optional[List[str]] = Field(None, description="Specific item IDs to remove (for disambiguation)")
@@ -62,10 +67,32 @@ class ItemData(BaseModel):
     name: str
     description: str
     bin_id: str
-    image_path: Optional[str] = None
+    image_path: Optional[str] = None  # Deprecated - use images instead
+    images: List[str] = []  # List of image IDs
+    primary_image: Optional[str] = None  # Primary image ID
     confidence_score: Optional[float] = None
     created_at: datetime
     updated_at: datetime
+
+class ImageMetadata(BaseModel):
+    image_id: str
+    item_id: str
+    bin_id: str
+    original_filename: Optional[str] = None
+    file_path: str
+    thumbnail_small: str
+    thumbnail_medium: str
+    width: int
+    height: int
+    file_size: int
+    format: str
+    file_hash: str
+    created_at: datetime
+    updated_at: datetime
+
+class ImageUploadRequest(BaseModel):
+    item_id: str = Field(..., description="Item ID to associate the image with")
+    set_as_primary: bool = Field(False, description="Set this image as the primary image for the item")
 
 class HealthData(BaseModel):
     status: str

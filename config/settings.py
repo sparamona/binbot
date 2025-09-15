@@ -42,7 +42,8 @@ class Settings:
         return {
             "database": {
                 "persist_directory": "/app/data/chromadb",
-                "collection_name": "inventory"
+                "collection_name": "inventory",
+                "embedding_dimension": 1536
             },
             "server": {
                 "host": "0.0.0.0",
@@ -53,7 +54,8 @@ class Settings:
                 "provider": "openai",
                 "openai": {
                     "model": "gpt-3.5-turbo",
-                    "embedding_model": "text-embedding-ada-002"
+                    "embedding_model": "text-embedding-ada-002",
+                    "embedding_dimension": 1536
                 }
             },
             "voice": {

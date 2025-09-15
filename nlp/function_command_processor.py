@@ -31,13 +31,14 @@ class CommandResult:
 class FunctionCommandProcessor:
     """Processes natural language commands using OpenAI function calling"""
 
-    def __init__(self, db_client, embedding_service, llm_client):
+    def __init__(self, db_client, embedding_service, llm_client, vision_service=None):
         self.db_client = db_client
         self.embedding_service = embedding_service
         self.llm_client = llm_client
-        
+        self.vision_service = vision_service
+
         # Initialize function handler
-        self.function_handler = FunctionCallHandler(db_client, embedding_service)
+        self.function_handler = FunctionCallHandler(db_client, embedding_service, vision_service)
         
         # Get function definitions for OpenAI
         self.functions = get_inventory_functions()

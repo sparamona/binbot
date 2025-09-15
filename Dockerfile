@@ -29,6 +29,7 @@ COPY llm/ ./llm/
 COPY api/ ./api/
 COPY session/ ./session/
 COPY nlp/ ./nlp/
+COPY storage/ ./storage/
 
 # Make start script executable
 RUN chmod +x start.sh

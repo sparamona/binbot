@@ -5,16 +5,18 @@ llm:
     api_key: "${OPENAI_API_KEY}"
     model: "gpt-3.5-turbo"
     embedding_model: "text-embedding-ada-002"
+    embedding_dimension: 1536  # OpenAI text-embedding-ada-002 dimension
     timeout: 30
   gemini:
     api_key: "${GEMINI_API_KEY}"
     model: "gemini-pro"
     timeout: 30
 
-# ChromaDB Configuration  
+# ChromaDB Configuration
 database:
   persist_directory: "/app/data/chromadb"
   collection_name: "inventory"
+  embedding_dimension: 1536  # Must match LLM embedding dimension
   
 # Error Handling
 error_handling:
