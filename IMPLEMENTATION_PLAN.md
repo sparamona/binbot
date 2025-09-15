@@ -311,34 +311,50 @@ This plan breaks down the BinBot implementation into small, testable phases. Eac
 
 ---
 
-## Phase 12: Advanced Features & Polish
-**Goal**: Complete remaining advanced features
+## Phase 12: Image Support (Multimodal)
+**Goal**: Add image capture, storage, and AI-powered visual recognition
 
 ### Tasks:
-1. **Advanced disambiguation**
-   - Improve similarity scoring
-   - Better disambiguation UI
-   - Confidence score display
+1. **Image infrastructure**
+   - Set up local image storage system (filesystem-based)
+   - Implement image upload and processing pipeline
+   - Add image compression and optimization
+   - Create image metadata storage in database
 
-2. **Enhanced error handling**
-   - Comprehensive error messages
-   - Retry mechanisms
-   - Better fallback strategies
+2. **Image capture & upload**
+   - Add camera integration for mobile devices
+   - Implement drag-and-drop image upload
+   - Add image preview and editing capabilities
+   - Support multiple image formats (JPEG, PNG, WebP)
 
-3. **Performance optimization**
-   - Embedding caching
-   - Query optimization
-   - Response time improvements
+3. **Visual recognition integration**
+   - Integrate with OpenAI Vision API for image analysis
+   - Implement automatic item identification from images
+   - Add image-based search functionality
+   - Create confidence scoring for visual matches
+
+4. **UI integration**
+   - Update wireframes to include image handling
+   - Add image display in bin contents view
+   - Implement image gallery for items
+   - Add image-based quick actions (identify, search, categorize)
+
+5. **Multimodal commands**
+   - Support "what is this?" with image + voice
+   - Implement image + text search queries
+   - Add voice descriptions of images for accessibility
+   - Create image-guided inventory operations
 
 ### Testing:
-- All error scenarios handled gracefully
-- Performance meets requirements
-- Advanced features work reliably
+- Image upload and storage works reliably
+- Visual recognition accurately identifies common items
+- Multimodal commands work seamlessly
+- Image features enhance inventory management workflow
 
 ---
 
 ## Phase 13: UI Enhancement & Final Polish
-**Goal**: Improve user interface and experience
+**Goal**: Improve user interface and experience with wireframe updates
 
 ### Tasks:
 1. **UI styling**
@@ -351,7 +367,13 @@ This plan breaks down the BinBot implementation into small, testable phases. Eac
    - Improved feedback messages
    - Keyboard shortcuts
 
-3. **Final testing**
+3. **Wireframe updates for image support**
+   - Update wireframes to include image capture buttons
+   - Add image display areas in bin contents
+   - Design image gallery and preview modals
+   - Include camera integration for mobile
+
+4. **Final testing**
    - End-to-end testing
    - Performance testing
    - User acceptance testing
@@ -361,6 +383,7 @@ This plan breaks down the BinBot implementation into small, testable phases. Eac
 - All features work together seamlessly
 - Performance is acceptable
 - User experience is smooth
+- Wireframes include comprehensive image handling
 
 ---
 
@@ -386,28 +409,35 @@ This plan breaks down the BinBot implementation into small, testable phases. Eac
 
 ---
 
-## Phase 15: Image Support (Multimodal)
-**Goal**: Users can attach images to items
+## Phase 15: Advanced Features & Polish
+**Goal**: Complete remaining advanced features and optimization
 
 ### Tasks:
-1. **Image upload handling**
-   - Add file upload to add endpoint
-   - Store images in persistent volume
-   - Generate image paths in metadata
+1. **Advanced disambiguation**
+   - Improve similarity scoring
+   - Better disambiguation UI
+   - Confidence score display
 
-2. **Basic image display**
-   - Show images in search results
-   - Handle missing images gracefully
+2. **Enhanced error handling**
+   - Comprehensive error messages
+   - Retry mechanisms
+   - Better fallback strategies
 
-3. **Frontend image support**
-   - Add file input to add form
-   - Display images in results
+3. **Performance optimization**
+   - Embedding caching
+   - Query optimization
+   - Response time improvements
+
+4. **Advanced search features**
+   - Fuzzy matching improvements
+   - Search result ranking
+   - Search history and suggestions
 
 ### Testing:
-- Images can be uploaded and stored
-- Images display in search results
-- File paths are stored correctly
-- Missing images handled gracefully
+- All error scenarios handled gracefully
+- Performance meets requirements
+- Advanced features work reliably
+- Search accuracy and speed improved
 
 ---
 

@@ -15,7 +15,7 @@ from config.settings import Settings
 from database.chromadb_client import ChromaDBClient
 from llm.client import LLMClient
 from llm.embeddings import EmbeddingService
-from api import health, search, test, add, remove, move, session, bulk, nlp
+from api import health, search, test, add, remove, move, session, bulk, nlp, voice
 from api_schemas import StandardResponse, ErrorDetail
 
 # Global instances
@@ -78,6 +78,7 @@ app.include_router(move.router)
 app.include_router(session.router, prefix="/session", tags=["session"])
 app.include_router(bulk.router)
 app.include_router(nlp.router)
+app.include_router(voice.router, prefix="/voice", tags=["voice"])
 
 # Set dependencies for API routers
 health.set_dependencies(db_client, llm_client, startup_time)

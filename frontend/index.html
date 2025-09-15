@@ -140,11 +140,12 @@
         <div id="chat-container">
             <div id="chat-messages" style="height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; background: #f9f9f9;"></div>
             <div class="form-group">
-                <input type="text" id="chat-input" placeholder="Type a command like 'add bolts to bin 3' or 'search for electronics'..." style="width: 60%; display: inline-block;" />
-                <button class="btn" onclick="sendChatMessage()" style="width: 10%; display: inline-block;">Send</button>
-                <button class="btn" id="voice-btn" onclick="toggleVoiceInput()" style="background-color: #dc3545; width: 10%; display: inline-block;">🎤</button>
-                <button class="btn" onclick="showHelp()" style="background-color: #28a745; width: 10%; display: inline-block;">Help</button>
+                <input type="text" id="chat-input" placeholder="Type a command like 'add bolts to bin 3' or 'search for electronics'..." style="width: 55%; display: inline-block;" />
+                <button class="btn" onclick="sendChatMessage()" style="width: 8%; display: inline-block;">Send</button>
+                <button class="btn" id="voice-btn" onclick="toggleVoiceInput()" style="background-color: #dc3545; width: 8%; display: inline-block;">🎤</button>
+                <button class="btn" onclick="showHelp()" style="background-color: #28a745; width: 8%; display: inline-block;">Help</button>
                 <button class="btn" id="voice-feedback-btn" onclick="toggleVoiceFeedback()" style="background-color: #6c757d; width: 8%; display: inline-block;">🔊</button>
+                <button class="btn" id="voice-provider-btn" onclick="toggleVoiceProvider()" style="background-color: #17a2b8; width: 8%; display: inline-block;" title="Voice Provider">🎛️</button>
             </div>
             <div id="voice-status" style="margin-top: 5px; font-size: 12px; color: #666; display: none;"></div>
         </div>
@@ -316,10 +317,8 @@
                 messageDiv.style.marginRight = 'auto';
                 messageDiv.innerHTML = `<strong>BinBot:</strong> ${message}`;
 
-                // Speak the response if voice feedback is enabled
-                if (!isUser) {
-                    speakResponse(message);
-                }
+                // Note: speakResponse is now called explicitly with clean content
+                // No automatic speaking of formatted HTML messages
             }
 
             chatMessages.appendChild(messageDiv);
@@ -399,16 +398,25 @@
                     addChatMessage(functionCallsHtml);
                 }
 
-                // Show the actual response
+                // Show the actual response and start voice synthesis in parallel
                 if (result.success) {
+                    // Start voice synthesis immediately (don't wait)
+                    const voicePromise = speakResponse(result.data.message);
+                    // Update UI in parallel
                     addChatMessage(`<strong>✅ Response:</strong><br>${result.data.message}`);
                 } else {
                     const errorMessage = result.error ? result.error.message : 'Unknown error';
+                    // Start voice synthesis immediately (don't wait)
+                    const voicePromise = speakResponse(errorMessage);
+                    // Update UI in parallel
                     addChatMessage(`<strong>❌ Error:</strong><br>${errorMessage}`);
                 }
             } catch (error) {
                 console.log('Caught exception:', error);
-                addChatMessage(`❌ Error: ${error.message}`);
+                const errorMsg = `Error: ${error.message}`;
+                addChatMessage(`❌ ${errorMsg}`);
+                // Speak the error message
+                speakResponse(errorMsg);
             }
         }
 
@@ -432,6 +440,7 @@
                     helpMessage += '<strong>Voice Interface:</strong><br>';
                     helpMessage += '• 🎤 Click microphone or press <strong>Ctrl+M</strong> to start voice input<br>';
                     helpMessage += '• 🔊 Click speaker or press <strong>Ctrl+Shift+S</strong> to toggle voice feedback<br>';
+                    helpMessage += '• 🎛️ Click settings to view voice provider (Browser/OpenAI)<br>';
                     helpMessage += '• Press <strong>Escape</strong> to stop listening<br>';
                     helpMessage += '• Voice commands work the same as text commands<br><br>';
 
@@ -454,6 +463,47 @@
         let isListening = false;
         let voiceFeedbackEnabled = false;
         let speechSynthesis = window.speechSynthesis;
+        let voiceProvider = 'browser'; // 'browser' or 'openai'
+        let voiceConfig = null;
+
+        // Audio cache for faster repeated responses
+        const audioCache = new Map();
+        const MAX_CACHE_SIZE = 50;
+
+        // Initialize Voice Configuration
+        async function initializeVoiceConfig() {
+            try {
+                const response = await fetch('/voice/config');
+                const data = await response.json();
+
+                if (data.provider) {
+                    voiceProvider = data.provider;
+                    voiceConfig = data;
+                    console.log(`Voice provider: ${voiceProvider}`, data);
+
+                    // Update UI to show current provider
+                    const voiceBtn = document.getElementById('voice-feedback-btn');
+                    const providerBtn = document.getElementById('voice-provider-btn');
+
+                    if (voiceProvider === 'openai') {
+                        voiceBtn.title = `Voice feedback (OpenAI ${data.current_settings.tts_voice || 'alloy'})`;
+                        if (providerBtn) {
+                            providerBtn.style.backgroundColor = '#28a745';
+                            providerBtn.title = `Voice: OpenAI (${data.current_settings.tts_voice || 'alloy'})`;
+                        }
+                    } else {
+                        voiceBtn.title = 'Voice feedback (Browser TTS)';
+                        if (providerBtn) {
+                            providerBtn.style.backgroundColor = '#17a2b8';
+                            providerBtn.title = 'Voice: Browser TTS';
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load voice config:', error);
+                voiceProvider = 'browser'; // fallback
+            }
+        }
 
         // Initialize Speech Recognition
         function initializeSpeechRecognition() {
@@ -570,31 +620,148 @@
             }
         }
 
+        // Toggle Voice Provider
+        async function toggleVoiceProvider() {
+            try {
+                // For now, this just shows current provider info
+                // In a full implementation, you'd want to make this configurable
+                const providerInfo = voiceProvider === 'openai' ?
+                    `🎛️ Voice Provider: OpenAI (${voiceConfig?.current_settings?.tts_voice || 'alloy'})` :
+                    '🎛️ Voice Provider: Browser TTS';
+
+                addChatMessage(providerInfo + '<br><small>Voice provider is configured in config.yaml</small>');
+
+                // Update button appearance based on provider
+                const btn = document.getElementById('voice-provider-btn');
+                if (voiceProvider === 'openai') {
+                    btn.style.backgroundColor = '#28a745';
+                    btn.title = `Voice: OpenAI (${voiceConfig?.current_settings?.tts_voice || 'alloy'})`;
+                } else {
+                    btn.style.backgroundColor = '#17a2b8';
+                    btn.title = 'Voice: Browser TTS';
+                }
+            } catch (error) {
+                console.error('Error toggling voice provider:', error);
+                addChatMessage('❌ Error checking voice provider');
+            }
+        }
+
         // Speak Response (Text-to-Speech)
-        function speakResponse(text) {
-            if (!voiceFeedbackEnabled || !speechSynthesis) return;
+        async function speakResponse(text) {
+            if (!voiceFeedbackEnabled) return;
+            if (!text || text.trim().length === 0) return;
+
+            const cleanText = text.trim();
+
+            try {
+                if (voiceProvider === 'openai') {
+                    await speakWithOpenAI(cleanText);
+                } else {
+                    await speakWithBrowser(cleanText);
+                }
+            } catch (error) {
+                console.error('Error in speech synthesis:', error);
+                // Fallback to browser TTS
+                if (voiceProvider === 'openai') {
+                    await speakWithBrowser(cleanText);
+                }
+            }
+        }
+
+        // Browser TTS Implementation
+        async function speakWithBrowser(text) {
+            if (!speechSynthesis) return;
 
             // Cancel any ongoing speech
             speechSynthesis.cancel();
 
-            // Clean up the text (remove emojis and formatting)
-            const cleanText = text.replace(/[🎯🔍❌✅💬🎤🔊🔇⚠️]/g, '').replace(/\n/g, ' ').replace(/BinBot:/g, '').trim();
+            const utterance = new SpeechSynthesisUtterance(text);
 
-            if (cleanText && cleanText.length > 0) {
-                try {
-                    const utterance = new SpeechSynthesisUtterance(cleanText);
-                    utterance.rate = 0.9;
-                    utterance.pitch = 1.0;
-                    utterance.volume = 0.8;
+            // Use config settings if available
+            if (voiceConfig && voiceConfig.current_settings) {
+                const settings = voiceConfig.current_settings;
+                utterance.rate = settings.tts_rate || 0.9;
+                utterance.pitch = settings.tts_pitch || 1.0;
+                utterance.volume = settings.tts_volume || 0.8;
+            } else {
+                utterance.rate = 0.9;
+                utterance.pitch = 1.0;
+                utterance.volume = 0.8;
+            }
 
-                    utterance.onerror = function(event) {
-                        console.error('Speech synthesis error:', event);
+            utterance.onerror = function(event) {
+                console.error('Browser speech synthesis error:', event);
+            };
+
+            speechSynthesis.speak(utterance);
+        }
+
+        // OpenAI TTS Implementation with caching
+        async function speakWithOpenAI(text) {
+            try {
+                // Check cache first for faster repeated responses
+                const cacheKey = text.toLowerCase().trim();
+                if (audioCache.has(cacheKey)) {
+                    console.log('Using cached audio for:', text);
+                    const cachedAudio = audioCache.get(cacheKey);
+                    cachedAudio.currentTime = 0; // Reset to beginning
+                    await cachedAudio.play();
+                    return;
+                }
+
+                const response = await fetch('/voice/tts', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        text: text
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success && result.audio_data) {
+                    // Convert base64 to audio and play
+                    const audioData = atob(result.audio_data);
+                    const audioArray = new Uint8Array(audioData.length);
+                    for (let i = 0; i < audioData.length; i++) {
+                        audioArray[i] = audioData.charCodeAt(i);
+                    }
+
+                    const audioBlob = new Blob([audioArray], { type: `audio/${result.audio_format}` });
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    const audio = new Audio(audioUrl);
+
+                    // Cache the audio for faster repeated responses
+                    if (audioCache.size >= MAX_CACHE_SIZE) {
+                        // Remove oldest entry if cache is full
+                        const firstKey = audioCache.keys().next().value;
+                        const oldAudio = audioCache.get(firstKey);
+                        if (oldAudio && oldAudio.src) {
+                            URL.revokeObjectURL(oldAudio.src);
+                        }
+                        audioCache.delete(firstKey);
+                    }
+                    audioCache.set(cacheKey, audio);
+
+                    audio.onended = () => {
+                        // Don't revoke URL immediately - keep for cache
                     };
 
-                    speechSynthesis.speak(utterance);
-                } catch (error) {
-                    console.error('Error in speech synthesis:', error);
+                    audio.onerror = (error) => {
+                        console.error('Audio playback error:', error);
+                        URL.revokeObjectURL(audioUrl);
+                        audioCache.delete(cacheKey);
+                    };
+
+                    await audio.play();
+                } else {
+                    throw new Error('OpenAI TTS failed: ' + (result.message || 'Unknown error'));
                 }
+            } catch (error) {
+                console.error('OpenAI TTS error:', error);
+                throw error;
             }
         }
 
@@ -627,7 +794,8 @@
                 }
             });
 
-            // Initialize voice recognition
+            // Initialize voice configuration and recognition
+            initializeVoiceConfig();
             initializeSpeechRecognition();
 
             // Check for microphone permissions

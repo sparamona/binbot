@@ -55,5 +55,23 @@ class Settings:
                     "model": "gpt-3.5-turbo",
                     "embedding_model": "text-embedding-ada-002"
                 }
+            },
+            "voice": {
+                "provider": "browser",
+                "browser": {
+                    "tts_rate": 0.9,
+                    "tts_pitch": 1.0,
+                    "tts_volume": 0.8
+                },
+                "openai": {
+                    "tts_model": "tts-1",
+                    "tts_voice": "alloy",
+                    "whisper_model": "whisper-1",
+                    "audio_format": "mp3"
+                }
             }
         }
+
+    def get_voice_config(self) -> Dict[str, Any]:
+        """Get voice configuration"""
+        return self.config.get('voice', self._get_default_config()['voice'])

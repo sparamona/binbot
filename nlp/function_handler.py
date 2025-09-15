@@ -208,21 +208,80 @@ class FunctionCallHandler:
             )
 
         try:
-            # For now, return a placeholder implementation
-            # TODO: Implement actual remove functionality
-            result_data = {
-                "removed_items": items,
-                "bin_id": bin_id,
-                "success": True,
-                "message": f"Remove functionality not yet fully implemented for function calling"
-            }
+            # Search for and remove items from the specified bin
+            removed_items = []
+            not_found_items = []
 
-            return FunctionCallResult(
-                success=True,
-                data=result_data,
-                function_name="remove_items_from_bin",
-                parameters=parameters
-            )
+            for item in items:
+                # Find matching items in the bin
+                search_results = self.db_client.search_documents(
+                    query=item,
+                    limit=10,
+                    min_relevance=0.6
+                )
+
+                # Filter by bin
+                bin_matches = [
+                    result for result in search_results.get('results', [])
+                    if result.get('bin_id') == bin_id
+                ]
+
+                if bin_matches:
+                    # Remove the best match
+                    item_to_remove = bin_matches[0]
+                    success = self.db_client.remove_document(item_to_remove['id'])
+
+                    if success:
+                        removed_items.append(item_to_remove['name'])
+
+                        # Create audit log entry
+                        audit_entry = {
+                            "operation_id": str(uuid.uuid4()),
+                            "operation_type": "remove",
+                            "item_id": item_to_remove['id'],
+                            "item_name": item_to_remove['name'],
+                            "bin_id": bin_id,
+                            "description": f"Removed '{item_to_remove['name']}' from bin {bin_id}",
+                            "timestamp": datetime.now().isoformat(),
+                            "metadata": {
+                                "original_query": item,
+                                "relevance_score": item_to_remove.get("relevance_score", 0.0)
+                            }
+                        }
+                        self.db_client.add_audit_log_entry(audit_entry)
+                    else:
+                        not_found_items.append(item)
+                else:
+                    not_found_items.append(item)
+
+            # Prepare result
+            if removed_items:
+                if not_found_items:
+                    message = f"Removed {', '.join(removed_items)} from bin {bin_id}. Could not find: {', '.join(not_found_items)}"
+                else:
+                    message = f"Successfully removed {', '.join(removed_items)} from bin {bin_id}"
+
+                result_data = {
+                    "removed_items": removed_items,
+                    "not_found_items": not_found_items,
+                    "bin_id": bin_id,
+                    "success": True,
+                    "message": message
+                }
+
+                return FunctionCallResult(
+                    success=True,
+                    data=result_data,
+                    function_name="remove_items_from_bin",
+                    parameters=parameters
+                )
+            else:
+                return FunctionCallResult(
+                    success=False,
+                    error=f"Could not find any of the specified items ({', '.join(items)}) in bin {bin_id}",
+                    function_name="remove_items_from_bin",
+                    parameters=parameters
+                )
 
         except Exception as e:
             logger.error(f"Error in remove_items function: {e}")
@@ -248,22 +307,92 @@ class FunctionCallHandler:
             )
 
         try:
-            # For now, return a placeholder implementation
-            # TODO: Implement actual move functionality
-            result_data = {
-                "moved_items": items,
-                "source_bin_id": source_bin_id,
-                "target_bin_id": target_bin_id,
-                "success": True,
-                "message": f"Move functionality not yet fully implemented for function calling"
-            }
+            # Move items from source bin to target bin
+            moved_items = []
+            not_found_items = []
 
-            return FunctionCallResult(
-                success=True,
-                data=result_data,
-                function_name="move_items_between_bins",
-                parameters=parameters
-            )
+            for item in items:
+                # Find matching items in the source bin
+                search_results = self.db_client.search_documents(
+                    query=item,
+                    limit=10,
+                    min_relevance=0.6
+                )
+
+                # Filter by source bin
+                bin_matches = [
+                    result for result in search_results.get('results', [])
+                    if result.get('bin_id') == source_bin_id
+                ]
+
+                if bin_matches:
+                    # Move the best match
+                    item_to_move = bin_matches[0]
+
+                    # Update the item's bin_id and description using ChromaDB collection update
+                    self.db_client.inventory_collection.update(
+                        ids=[item_to_move['id']],
+                        metadatas=[{
+                            **item_to_move,
+                            'bin_id': target_bin_id,
+                            'description': f"{item_to_move['name']} in bin {target_bin_id}"
+                        }]
+                    )
+                    success = True
+
+                    if success:
+                        moved_items.append(item_to_move['name'])
+
+                        # Create audit log entry
+                        audit_entry = {
+                            "operation_id": str(uuid.uuid4()),
+                            "operation_type": "move",
+                            "item_id": item_to_move['id'],
+                            "item_name": item_to_move['name'],
+                            "source_bin_id": source_bin_id,
+                            "target_bin_id": target_bin_id,
+                            "description": f"Moved '{item_to_move['name']}' from bin {source_bin_id} to bin {target_bin_id}",
+                            "timestamp": datetime.now().isoformat(),
+                            "metadata": {
+                                "original_query": item,
+                                "relevance_score": item_to_move.get("relevance_score", 0.0)
+                            }
+                        }
+                        self.db_client.add_audit_log_entry(audit_entry)
+                    else:
+                        not_found_items.append(item)
+                else:
+                    not_found_items.append(item)
+
+            # Prepare result
+            if moved_items:
+                if not_found_items:
+                    message = f"Moved {', '.join(moved_items)} from bin {source_bin_id} to bin {target_bin_id}. Could not find: {', '.join(not_found_items)}"
+                else:
+                    message = f"Successfully moved {', '.join(moved_items)} from bin {source_bin_id} to bin {target_bin_id}"
+
+                result_data = {
+                    "moved_items": moved_items,
+                    "not_found_items": not_found_items,
+                    "source_bin_id": source_bin_id,
+                    "target_bin_id": target_bin_id,
+                    "success": True,
+                    "message": message
+                }
+
+                return FunctionCallResult(
+                    success=True,
+                    data=result_data,
+                    function_name="move_items_between_bins",
+                    parameters=parameters
+                )
+            else:
+                return FunctionCallResult(
+                    success=False,
+                    error=f"Could not find any of the specified items ({', '.join(items)}) in bin {source_bin_id}",
+                    function_name="move_items_between_bins",
+                    parameters=parameters
+                )
 
         except Exception as e:
             logger.error(f"Error in move_items function: {e}")

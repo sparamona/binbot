@@ -27,6 +27,24 @@ transactions:
   bulk_timeout: 300
   max_bulk_size: 100
 
+# Voice Configuration
+voice:
+  # Voice provider: "browser" (free, fast) or "openai" (premium quality)
+  provider: "openai"
+
+  # Browser voice settings (used when provider = "browser")
+  browser:
+    tts_rate: 0.9
+    tts_pitch: 1.0
+    tts_volume: 0.8
+
+  # OpenAI voice settings (used when provider = "openai")
+  openai:
+    tts_model: "tts-1"  # or "tts-1-hd" for higher quality
+    tts_voice: "alloy"  # alloy, echo, fable, onyx, nova, shimmer
+    whisper_model: "whisper-1"
+    audio_format: "opus"  # opus is faster to encode/decode than mp3
+
 # Server Configuration
 server:
   host: "0.0.0.0"
