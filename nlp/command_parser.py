@@ -81,13 +81,22 @@ class LLMCommandParser:
 
             # Handle cases where LLM returns text instead of JSON
             if not response_text.startswith('{'):
-                logger.debug(f"LLM returned non-JSON response: {response_text}")
-                return ParsedCommand(
-                    action="unknown",
-                    raw_command=user_message,
-                    confidence=0.0,
-                    clarification_needed=response_text
-                )
+                logger.warning(f"LLM returned non-JSON response: {response_text}")
+                # Try to extract useful information from the response
+                if any(word in response_text.lower() for word in ['bin', 'add', 'remove', 'search', 'move', 'find']):
+                    return ParsedCommand(
+                        action="unknown",
+                        raw_command=user_message,
+                        confidence=0.0,
+                        clarification_needed=f"I understood you want to do something with inventory, but need you to be more specific. Try commands like 'add [item] to bin [number]' or 'what's in bin [number]'."
+                    )
+                else:
+                    return ParsedCommand(
+                        action="unknown",
+                        raw_command=user_message,
+                        confidence=0.0,
+                        clarification_needed="I can help you manage your inventory. Try commands like 'add bolts to bin 3', 'what's in bin 5', or 'search for electronics'."
+                    )
 
             # Parse JSON response
             parsed_json = json.loads(response_text)

@@ -96,6 +96,38 @@
                 grid-template-columns: 1fr;
             }
         }
+
+        /* Voice Interface Styles */
+        #voice-btn {
+            transition: all 0.3s ease;
+            font-size: 16px;
+        }
+
+        #voice-btn:hover {
+            transform: scale(1.05);
+        }
+
+        #voice-btn.listening {
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        #voice-status {
+            background-color: #e3f2fd;
+            border: 1px solid #2196f3;
+            border-radius: 4px;
+            padding: 5px 10px;
+            font-style: italic;
+        }
+
+        #voice-feedback-btn {
+            transition: all 0.3s ease;
+        }
     </style>
 </head>
 <body>
@@ -108,10 +140,13 @@
         <div id="chat-container">
             <div id="chat-messages" style="height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; background: #f9f9f9;"></div>
             <div class="form-group">
-                <input type="text" id="chat-input" placeholder="Type a command like 'add bolts to bin 3' or 'search for electronics'..." style="width: 70%; display: inline-block;" />
-                <button class="btn" onclick="sendChatMessage()" style="width: 12%; display: inline-block;">Send</button>
-                <button class="btn" onclick="showHelp()" style="background-color: #28a745; width: 12%; display: inline-block;">Help</button>
+                <input type="text" id="chat-input" placeholder="Type a command like 'add bolts to bin 3' or 'search for electronics'..." style="width: 60%; display: inline-block;" />
+                <button class="btn" onclick="sendChatMessage()" style="width: 10%; display: inline-block;">Send</button>
+                <button class="btn" id="voice-btn" onclick="toggleVoiceInput()" style="background-color: #dc3545; width: 10%; display: inline-block;">🎤</button>
+                <button class="btn" onclick="showHelp()" style="background-color: #28a745; width: 10%; display: inline-block;">Help</button>
+                <button class="btn" id="voice-feedback-btn" onclick="toggleVoiceFeedback()" style="background-color: #6c757d; width: 8%; display: inline-block;">🔊</button>
             </div>
+            <div id="voice-status" style="margin-top: 5px; font-size: 12px; color: #666; display: none;"></div>
         </div>
     </div>
 
@@ -280,6 +315,11 @@
                 messageDiv.style.color = '#333';
                 messageDiv.style.marginRight = 'auto';
                 messageDiv.innerHTML = `<strong>BinBot:</strong> ${message}`;
+
+                // Speak the response if voice feedback is enabled
+                if (!isUser) {
+                    speakResponse(message);
+                }
             }
 
             chatMessages.appendChild(messageDiv);
@@ -316,12 +356,19 @@
 
                 const result = await response.json();
 
-                // Simple debug - show the actual success value in the message
+                // Debug: Show the command and full JSON response
+                addChatMessage(`<strong>🔍 Debug Info:</strong><br>
+                    <strong>Command:</strong> "${command}"<br>
+                    <strong>Success:</strong> ${result.success}<br>
+                    <strong>Full JSON Response:</strong><br>
+                    <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; font-size: 12px; overflow-x: auto;">${JSON.stringify(result, null, 2)}</pre>`);
+
+                // Show the actual response
                 if (result.success) {
-                    addChatMessage(result.data.message);
+                    addChatMessage(`<strong>✅ Response:</strong><br>${result.data.message}`);
                 } else {
                     const errorMessage = result.error ? result.error.message : 'Unknown error';
-                    addChatMessage(`❌ ${errorMessage} (success=${result.success})`);
+                    addChatMessage(`<strong>❌ Error:</strong><br>${errorMessage}`);
                 }
             } catch (error) {
                 console.log('Caught exception:', error);
@@ -346,6 +393,12 @@
                         helpMessage += '<br>';
                     });
 
+                    helpMessage += '<strong>Voice Interface:</strong><br>';
+                    helpMessage += '• 🎤 Click microphone or press <strong>Ctrl+M</strong> to start voice input<br>';
+                    helpMessage += '• 🔊 Click speaker or press <strong>Ctrl+Shift+S</strong> to toggle voice feedback<br>';
+                    helpMessage += '• Press <strong>Escape</strong> to stop listening<br>';
+                    helpMessage += '• Voice commands work the same as text commands<br><br>';
+
                     helpMessage += '<strong>Tips:</strong><br>';
                     result.data.tips.forEach(tip => {
                         helpMessage += `• ${tip}<br>`;
@@ -360,7 +413,156 @@
             }
         }
 
-        // Allow Enter key to send messages
+        // Voice Interface Variables
+        let recognition = null;
+        let isListening = false;
+        let voiceFeedbackEnabled = false;
+        let speechSynthesis = window.speechSynthesis;
+
+        // Initialize Speech Recognition
+        function initializeSpeechRecognition() {
+            if ('webkitSpeechRecognition' in window) {
+                recognition = new webkitSpeechRecognition();
+            } else if ('SpeechRecognition' in window) {
+                recognition = new SpeechRecognition();
+            } else {
+                console.log('Speech recognition not supported');
+                return false;
+            }
+
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            recognition.lang = 'en-US';
+
+            recognition.onstart = function() {
+                isListening = true;
+                updateVoiceButton();
+                showVoiceStatus('Listening... Speak your command');
+            };
+
+            recognition.onresult = function(event) {
+                const transcript = event.results[0][0].transcript;
+                document.getElementById('chat-input').value = transcript;
+                showVoiceStatus(`Heard: "${transcript}"`);
+
+                // Automatically send the command
+                setTimeout(() => {
+                    sendChatMessage();
+                }, 500);
+            };
+
+            recognition.onerror = function(event) {
+                console.error('Speech recognition error:', event.error);
+                showVoiceStatus(`Error: ${event.error}`);
+                isListening = false;
+                updateVoiceButton();
+            };
+
+            recognition.onend = function() {
+                isListening = false;
+                updateVoiceButton();
+                hideVoiceStatus();
+            };
+
+            return true;
+        }
+
+        // Toggle Voice Input
+        function toggleVoiceInput() {
+            if (!recognition) {
+                if (!initializeSpeechRecognition()) {
+                    addChatMessage('❌ Voice input not supported in this browser. Please use Chrome, Edge, or Safari.');
+                    return;
+                }
+            }
+
+            if (isListening) {
+                recognition.stop();
+            } else {
+                try {
+                    recognition.start();
+                } catch (error) {
+                    console.error('Error starting recognition:', error);
+                    addChatMessage('❌ Could not start voice input. Please check microphone permissions.');
+                }
+            }
+        }
+
+        // Update Voice Button Appearance
+        function updateVoiceButton() {
+            const btn = document.getElementById('voice-btn');
+            if (isListening) {
+                btn.style.backgroundColor = '#28a745';
+                btn.innerHTML = '🎤';
+                btn.title = 'Click to stop listening (Esc)';
+                btn.classList.add('listening');
+            } else {
+                btn.style.backgroundColor = '#dc3545';
+                btn.innerHTML = '🎤';
+                btn.title = 'Click to start voice input (Ctrl+M)';
+                btn.classList.remove('listening');
+            }
+        }
+
+        // Show Voice Status
+        function showVoiceStatus(message) {
+            const status = document.getElementById('voice-status');
+            status.textContent = message;
+            status.style.display = 'block';
+        }
+
+        // Hide Voice Status
+        function hideVoiceStatus() {
+            setTimeout(() => {
+                document.getElementById('voice-status').style.display = 'none';
+            }, 2000);
+        }
+
+        // Toggle Voice Feedback
+        function toggleVoiceFeedback() {
+            voiceFeedbackEnabled = !voiceFeedbackEnabled;
+            const btn = document.getElementById('voice-feedback-btn');
+
+            if (voiceFeedbackEnabled) {
+                btn.style.backgroundColor = '#28a745';
+                btn.title = 'Voice feedback ON - Click to disable';
+                addChatMessage('🔊 Voice feedback enabled');
+            } else {
+                btn.style.backgroundColor = '#6c757d';
+                btn.title = 'Voice feedback OFF - Click to enable';
+                addChatMessage('🔇 Voice feedback disabled');
+            }
+        }
+
+        // Speak Response (Text-to-Speech)
+        function speakResponse(text) {
+            if (!voiceFeedbackEnabled || !speechSynthesis) return;
+
+            // Cancel any ongoing speech
+            speechSynthesis.cancel();
+
+            // Clean up the text (remove emojis and formatting)
+            const cleanText = text.replace(/[🎯🔍❌✅💬🎤🔊🔇⚠️]/g, '').replace(/\n/g, ' ').replace(/BinBot:/g, '').trim();
+
+            if (cleanText && cleanText.length > 0) {
+                try {
+                    const utterance = new SpeechSynthesisUtterance(cleanText);
+                    utterance.rate = 0.9;
+                    utterance.pitch = 1.0;
+                    utterance.volume = 0.8;
+
+                    utterance.onerror = function(event) {
+                        console.error('Speech synthesis error:', event);
+                    };
+
+                    speechSynthesis.speak(utterance);
+                } catch (error) {
+                    console.error('Error in speech synthesis:', error);
+                }
+            }
+        }
+
+        // Allow Enter key to send messages and keyboard shortcuts
         document.addEventListener('DOMContentLoaded', function() {
             const chatInput = document.getElementById('chat-input');
             chatInput.addEventListener('keypress', function(e) {
@@ -369,8 +571,45 @@
                 }
             });
 
+            // Add keyboard shortcuts
+            document.addEventListener('keydown', function(e) {
+                // Ctrl/Cmd + M for microphone
+                if ((e.ctrlKey || e.metaKey) && e.key === 'm') {
+                    e.preventDefault();
+                    toggleVoiceInput();
+                }
+
+                // Ctrl/Cmd + Shift + S for voice feedback toggle
+                if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'S') {
+                    e.preventDefault();
+                    toggleVoiceFeedback();
+                }
+
+                // Escape to stop listening
+                if (e.key === 'Escape' && isListening) {
+                    recognition.stop();
+                }
+            });
+
+            // Initialize voice recognition
+            initializeSpeechRecognition();
+
+            // Check for microphone permissions
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                navigator.mediaDevices.getUserMedia({ audio: true })
+                    .then(function(stream) {
+                        // Microphone access granted
+                        stream.getTracks().forEach(track => track.stop());
+                        console.log('Microphone access granted');
+                    })
+                    .catch(function(error) {
+                        console.log('Microphone access denied:', error);
+                        addChatMessage('⚠️ Microphone access denied. Voice input may not work properly.');
+                    });
+            }
+
             // Add welcome message
-            addChatMessage('Welcome to BinBot! Type commands like "add bolts to bin 3" or click Help for examples.');
+            addChatMessage('Welcome to BinBot! Type commands like "add bolts to bin 3" or click Help for examples. 🎤 Click the microphone for voice input! (Ctrl+M)');
         });
 
         // Utility function to format JSON response
