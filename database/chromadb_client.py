@@ -151,10 +151,10 @@ class ChromaDBClient:
 
             doc_id = str(uuid.uuid4())
             document_text = f"{name} - {description}"
-            
+
             # Determine embedding model version
             embedding_model = "openai" if len(embedding) == 1536 else "hash-fallback-v1"
-            
+
             metadata = {
                 "name": name,
                 "bin_id": bin_id,
@@ -169,12 +169,89 @@ class ChromaDBClient:
                 embeddings=[embedding],
                 ids=[doc_id]
             )
-            
+
             print(f"Added document: {name} (ID: {doc_id})")
             return True
 
         except Exception as e:
             print(f"Error adding document: {e}")
+            return False
+
+    def add_documents_bulk(self, items: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Add multiple documents in a single transaction with rollback capability"""
+        try:
+            if self.inventory_collection is None:
+                return {"success": False, "error": "Inventory collection not initialized"}
+
+            # Prepare all data first
+            doc_ids = []
+            documents = []
+            metadatas = []
+            embeddings = []
+            added_items = []
+
+            for item in items:
+                doc_id = str(uuid.uuid4())
+                document_text = f"{item['name']} - {item['description']}"
+
+                # Determine embedding model version
+                embedding_model = "openai" if len(item['embedding']) == 1536 else "hash-fallback-v1"
+
+                metadata = {
+                    "name": item['name'],
+                    "bin_id": item['bin_id'],
+                    "description": item['description'],
+                    "created_at": datetime.now().isoformat(),
+                    "embedding_model": embedding_model
+                }
+
+                doc_ids.append(doc_id)
+                documents.append(document_text)
+                metadatas.append(metadata)
+                embeddings.append(item['embedding'])
+                added_items.append({
+                    "id": doc_id,
+                    "name": item['name'],
+                    "bin_id": item['bin_id'],
+                    "description": item['description']
+                })
+
+            # Atomic operation - add all documents at once
+            self.inventory_collection.add(
+                documents=documents,
+                metadatas=metadatas,
+                embeddings=embeddings,
+                ids=doc_ids
+            )
+
+            print(f"Bulk added {len(doc_ids)} documents")
+            return {
+                "success": True,
+                "added_items": added_items,
+                "doc_ids": doc_ids
+            }
+
+        except Exception as e:
+            print(f"Error in bulk add operation: {e}")
+            return {"success": False, "error": str(e)}
+
+    def rollback_bulk_add(self, doc_ids: List[str]) -> bool:
+        """Rollback a bulk add operation by removing the specified document IDs"""
+        try:
+            if self.inventory_collection is None:
+                print("Inventory collection not initialized")
+                return False
+
+            if not doc_ids:
+                return True  # Nothing to rollback
+
+            # Remove all documents that were added
+            self.inventory_collection.delete(ids=doc_ids)
+            print(f"Rolled back {len(doc_ids)} documents")
+            return True
+
+        except Exception as e:
+            print(f"Error rolling back bulk add: {e}")
             return False
 
     def add_audit_log_entry(self, audit_entry: Dict[str, Any]) -> bool:
