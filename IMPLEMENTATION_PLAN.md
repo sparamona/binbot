@@ -290,54 +290,7 @@ This plan breaks down the BinBot implementation into small, testable phases. Eac
 
 ---
 
-## Phase 11: Undo Functionality
-**Goal**: Users can undo recent operations
-
-### Tasks:
-1. **Undo endpoint**
-   - Implement `POST /undo` endpoint
-   - Restore previous states from audit log
-   - Handle bulk operation undos
-
-2. **Frontend undo interface**
-   - Add prominent undo button
-   - Show what will be undone
-   - Confirm undo operations
-
-### Testing:
-- Single operations can be undone
-- Bulk operations can be undone atomically
-- Undo creates proper audit entries
-- Frontend undo interface works
-
----
-
-## Phase 12: Image Support (Multimodal)
-**Goal**: Users can attach images to items
-
-### Tasks:
-1. **Image upload handling**
-   - Add file upload to add endpoint
-   - Store images in persistent volume
-   - Generate image paths in metadata
-
-2. **Basic image display**
-   - Show images in search results
-   - Handle missing images gracefully
-
-3. **Frontend image support**
-   - Add file input to add form
-   - Display images in results
-
-### Testing:
-- Images can be uploaded and stored
-- Images display in search results
-- File paths are stored correctly
-- Missing images handled gracefully
-
----
-
-## Phase 13: Voice Interface (Web Speech API)
+## Phase 11: Voice Interface (Web Speech API)
 **Goal**: Voice input for natural interaction
 
 ### Tasks:
@@ -358,7 +311,7 @@ This plan breaks down the BinBot implementation into small, testable phases. Eac
 
 ---
 
-## Phase 14: Advanced Features & Polish
+## Phase 12: Advanced Features & Polish
 **Goal**: Complete remaining advanced features
 
 ### Tasks:
@@ -384,7 +337,7 @@ This plan breaks down the BinBot implementation into small, testable phases. Eac
 
 ---
 
-## Phase 15: UI Enhancement & Final Polish
+## Phase 13: UI Enhancement & Final Polish
 **Goal**: Improve user interface and experience
 
 ### Tasks:
@@ -408,6 +361,53 @@ This plan breaks down the BinBot implementation into small, testable phases. Eac
 - All features work together seamlessly
 - Performance is acceptable
 - User experience is smooth
+
+---
+
+## Phase 14: Undo Functionality
+**Goal**: Users can undo recent operations
+
+### Tasks:
+1. **Undo endpoint**
+   - Implement `POST /undo` endpoint
+   - Restore previous states from audit log
+   - Handle bulk operation undos
+
+2. **Frontend undo interface**
+   - Add prominent undo button
+   - Show what will be undone
+   - Confirm undo operations
+
+### Testing:
+- Single operations can be undone
+- Bulk operations can be undone atomically
+- Undo creates proper audit entries
+- Frontend undo interface works
+
+---
+
+## Phase 15: Image Support (Multimodal)
+**Goal**: Users can attach images to items
+
+### Tasks:
+1. **Image upload handling**
+   - Add file upload to add endpoint
+   - Store images in persistent volume
+   - Generate image paths in metadata
+
+2. **Basic image display**
+   - Show images in search results
+   - Handle missing images gracefully
+
+3. **Frontend image support**
+   - Add file input to add form
+   - Display images in results
+
+### Testing:
+- Images can be uploaded and stored
+- Images display in search results
+- File paths are stored correctly
+- Missing images handled gracefully
 
 ---
 

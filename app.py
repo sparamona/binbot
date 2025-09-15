@@ -1,14 +1,21 @@
 import time
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
 from config.settings import Settings
 from database.chromadb_client import ChromaDBClient
 from llm.client import LLMClient
 from llm.embeddings import EmbeddingService
-from api import health, search, test, add, remove, move, session, context, bulk
+from api import health, search, test, add, remove, move, session, bulk, nlp
 from api_schemas import StandardResponse, ErrorDetail
 
 # Global instances
@@ -69,16 +76,16 @@ app.include_router(add.router)
 app.include_router(remove.router)
 app.include_router(move.router)
 app.include_router(session.router, prefix="/session", tags=["session"])
-app.include_router(context.router, prefix="/context", tags=["context"])
 app.include_router(bulk.router)
+app.include_router(nlp.router)
 
 # Set dependencies for API routers
 health.set_dependencies(db_client, llm_client, startup_time)
 add.set_dependencies(db_client, embedding_service)
 remove.set_dependencies(db_client, embedding_service)
 move.set_dependencies(db_client, embedding_service)
-context.set_dependencies(db_client, embedding_service)
 bulk.set_dependencies(db_client, embedding_service)
+nlp.set_dependencies(db_client, embedding_service, llm_client)
 
 @app.get("/test")
 async def test_page():

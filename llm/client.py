@@ -73,3 +73,61 @@ class LLMClient:
         except Exception as e:
             print(f"LLM connection validation error: {e}")
             return False
+
+    async def chat_completion(self, messages, temperature=0.7, max_tokens=500):
+        """Generate chat completion using the available LLM provider"""
+        if self.provider == "openai" and self.openai_client:
+            try:
+                response = self.openai_client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens
+                )
+                return response
+            except Exception as e:
+                print(f"OpenAI chat completion error: {e}")
+                raise
+
+        elif self.provider == "gemini" and self.gemini_model:
+            try:
+                # Convert messages to Gemini format
+                prompt = self._convert_messages_to_gemini_prompt(messages)
+                response = self.gemini_model.generate_content(prompt)
+
+                # Convert Gemini response to OpenAI-like format
+                class MockChoice:
+                    def __init__(self, content):
+                        self.message = MockMessage(content)
+
+                class MockMessage:
+                    def __init__(self, content):
+                        self.content = content
+
+                class MockResponse:
+                    def __init__(self, content):
+                        self.choices = [MockChoice(content)]
+
+                return MockResponse(response.text)
+            except Exception as e:
+                print(f"Gemini chat completion error: {e}")
+                raise
+
+        else:
+            raise Exception("No LLM provider available")
+
+    def _convert_messages_to_gemini_prompt(self, messages):
+        """Convert OpenAI-style messages to Gemini prompt format"""
+        prompt_parts = []
+        for message in messages:
+            role = message.get("role", "user")
+            content = message.get("content", "")
+
+            if role == "system":
+                prompt_parts.append(f"System: {content}")
+            elif role == "user":
+                prompt_parts.append(f"User: {content}")
+            elif role == "assistant":
+                prompt_parts.append(f"Assistant: {content}")
+
+        return "\n\n".join(prompt_parts)
