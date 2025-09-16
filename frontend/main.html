@@ -401,8 +401,30 @@
                     // Speak the response if voice mode is enabled
                     speakResponse(response);
 
-                    // Update current bin based on the operation performed
-                    await updateCurrentBinFromCommand(command, response, data.data);
+                    // Update current bin from JSON response if provided
+                    let currentBinFromResponse = null;
+
+                    // Check for current_bin in the nested results structure
+                    if (data.data?.results && data.data.results.length > 0) {
+                        for (const result of data.data.results) {
+                            if (result.result?.current_bin) {
+                                currentBinFromResponse = result.result.current_bin;
+                                break; // Use the first current_bin found
+                            }
+                        }
+                    }
+
+                    // Fallback: check for current_bin directly in data
+                    if (!currentBinFromResponse && data.data?.current_bin) {
+                        currentBinFromResponse = data.data.current_bin;
+                    }
+
+                    if (currentBinFromResponse) {
+                        console.log(`Updating current bin to: ${currentBinFromResponse} (from JSON response)`);
+                        await updateCurrentBin(currentBinFromResponse);
+                    } else {
+                        console.log('No current_bin found in response, keeping current bin unchanged');
+                    }
 
                 } else {
                     throw new Error(data.error?.message || 'Command failed');
@@ -416,79 +438,7 @@
             }
         }
 
-        async function updateCurrentBinFromCommand(command, response, responseData) {
-            try {
-                const commandLower = command.toLowerCase();
-                const responseLower = response.toLowerCase();
 
-                // Extract bin IDs from various patterns
-                const extractBinId = (text) => {
-                    // Match patterns like "bin 3", "bin number 5", "to bin 2", etc.
-                    const patterns = [
-                        /(?:bin\s+(?:number\s+)?|to\s+bin\s+)(\w+)/i,
-                        /(?:^|\s)(\d+)(?:\s|$)/,  // standalone numbers
-                        /bin\s*[:\-]?\s*(\w+)/i
-                    ];
-
-                    for (const pattern of patterns) {
-                        const match = text.match(pattern);
-                        if (match) return match[1];
-                    }
-                    return null;
-                };
-
-                let targetBin = null;
-
-                // 1. ADD OPERATIONS - update to the bin where items were added
-                if (commandLower.includes('add') || responseLower.includes('added')) {
-                    targetBin = extractBinId(command) || extractBinId(response);
-                }
-
-                // 2. LIST/SHOW OPERATIONS - update to the bin being viewed
-                else if (commandLower.includes('list') || commandLower.includes('show') ||
-                         commandLower.includes('what') || responseLower.includes('contains')) {
-                    targetBin = extractBinId(command) || extractBinId(response);
-                }
-
-                // 3. MOVE OPERATIONS - update to the destination bin
-                else if (commandLower.includes('move') || responseLower.includes('moved')) {
-                    // For move operations, prefer "to bin X" pattern for destination
-                    const toBinMatch = command.match(/to\s+bin\s+(\w+)/i) || response.match(/to\s+bin\s+(\w+)/i);
-                    if (toBinMatch) {
-                        targetBin = toBinMatch[1];
-                    } else {
-                        // Fallback to any bin mentioned
-                        targetBin = extractBinId(command) || extractBinId(response);
-                    }
-                }
-
-                // 4. REMOVE OPERATIONS - update to the bin where items were removed from
-                else if (commandLower.includes('remove') || commandLower.includes('delete') ||
-                         responseLower.includes('removed') || responseLower.includes('deleted')) {
-                    targetBin = extractBinId(command) || extractBinId(response);
-                }
-
-                // 5. SEARCH OPERATIONS - if search mentions a specific bin
-                else if (commandLower.includes('search') || commandLower.includes('find')) {
-                    const binInSearch = extractBinId(command);
-                    if (binInSearch) {
-                        targetBin = binInSearch;
-                    }
-                }
-
-                // Update current bin if we found a target bin
-                if (targetBin) {
-                    console.log(`Updating current bin to: ${targetBin} (from command: "${command}")`);
-                    await updateCurrentBin(targetBin);
-                } else {
-                    console.log(`No bin detected in command: "${command}" or response: "${response}"`);
-                }
-
-            } catch (error) {
-                console.error('Error updating current bin from command:', error);
-                // Don't show error to user, just log it
-            }
-        }
 
         async function takePhoto() {
             try {

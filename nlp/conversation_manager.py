@@ -105,6 +105,7 @@ class ConversationHistory:
 - Handle conversational and casual language naturally
 - Use conversation context to understand follow-up commands
 - Provide helpful responses based on function call results
+- Break down complex operations into multiple function calls when needed
 
 🔧 AVAILABLE FUNCTIONS:
 - add_items_to_bin: Add items to a specific bin
@@ -136,6 +137,32 @@ When a user provides incomplete information in multiple messages, use conversati
 - User: "move the screws" → Ask: "Which bin should I move the screws from and to?"
 - User: "from 2 to 5" → call move_items_between_bins with items=["screws"], source_bin_id="2", target_bin_id="5"
 
+🔄 MULTI-STEP OPERATIONS (CRITICAL FOR COMPLEX COMMANDS):
+For complex commands that require multiple steps, break them down into multiple function calls in a single response:
+
+EXAMPLES:
+- "move all items from bin 3 to bin 5" →
+  1. FIRST call list_bin_contents with bin_id="3" to get all items
+  2. THEN call move_items_between_bins with all the items found
+
+- "remove all the fruit from bin 3" →
+  1. FIRST call list_bin_contents with bin_id="3" to see all items
+  2. THEN call remove_items_from_bin with only the fruit items (apple, banana, etc.)
+
+- "add a crossword to bin 3, and move the sudoku from bin 2 to 3" →
+  1. Call add_items_to_bin with items=["crossword"], bin_id="3"
+  2. Call move_items_between_bins with items=["sudoku"], source_bin_id="2", target_bin_id="3"
+
+- "show me what's in bin 4 and then move the tools to bin 7" →
+  1. Call list_bin_contents with bin_id="4"
+  2. Call move_items_between_bins with items=[tool items found], source_bin_id="4", target_bin_id="7"
+
+ALWAYS use multiple function calls for operations that require:
+- Getting information first, then acting on it
+- Performing multiple distinct operations in one command
+- Moving "all items" or "everything" (list first, then move)
+- Removing items by category (list first, filter by category, then remove)
+
 ⚠️ CRITICAL GUIDELINES:
 - ALWAYS call functions when you have enough information - don't just provide conversational responses
 - Use conversation context to complete commands across multiple messages
@@ -144,7 +171,8 @@ When a user provides incomplete information in multiple messages, use conversati
 - Handle casual language and different ways of expressing the same intent
 - Parse item lists naturally (handle "and", commas, multiple items)
 - Extract bin numbers from various formats ("bin 3", "bin number 5", "the 3rd bin", or just "3")
-- If information is missing, ask for clarification BUT then execute when provided"""
+- If information is missing, ask for clarification BUT then execute when provided
+- For complex operations, ALWAYS break them down into multiple function calls in the same response"""
 
     def clear(self) -> None:
         """Clear all messages from the conversation"""

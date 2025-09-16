@@ -197,6 +197,9 @@ class FunctionCallHandler:
                 "success": success
             }
 
+            # Add current_bin to result data
+            result_data["current_bin"] = bin_id
+
             return FunctionCallResult(
                 success=success,
                 data=result_data,
@@ -326,6 +329,9 @@ class FunctionCallHandler:
                     "message": message
                 }
 
+                # Add current_bin to result data
+                result_data["current_bin"] = bin_id
+
                 return FunctionCallResult(
                     success=True,
                     data=result_data,
@@ -443,6 +449,9 @@ class FunctionCallHandler:
                     "message": message
                 }
 
+                # Add current_bin to result data (target bin for move operations)
+                result_data["current_bin"] = target_bin_id
+
                 return FunctionCallResult(
                     success=True,
                     data=result_data,
@@ -552,6 +561,9 @@ class FunctionCallHandler:
                 "items": bin_items,
                 "success": True
             }
+
+            # Add current_bin to result data
+            result_data["current_bin"] = bin_id
 
             return FunctionCallResult(
                 success=True,
