@@ -44,6 +44,79 @@
             color: white;
             padding: 1rem;
             font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-title {
+            font-size: 1rem;
+        }
+
+        .voice-controls {
+            display: flex;
+            align-items: center;
+        }
+
+        .voice-toggle {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            font-size: 0.875rem;
+            gap: 0.5rem;
+        }
+
+        .voice-toggle input[type="checkbox"] {
+            display: none;
+        }
+
+        .toggle-slider {
+            position: relative;
+            width: 44px;
+            height: 24px;
+            background: rgba(255,255,255,0.3);
+            border-radius: 12px;
+            transition: background 0.3s;
+        }
+
+        .toggle-slider::before {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 20px;
+            height: 20px;
+            background: white;
+            border-radius: 50%;
+            transition: transform 0.3s;
+        }
+
+        .voice-toggle input[type="checkbox"]:checked + .toggle-slider {
+            background: rgba(255,255,255,0.5);
+        }
+
+        .voice-toggle input[type="checkbox"]:checked + .toggle-slider::before {
+            transform: translateX(20px);
+        }
+
+        .toggle-label {
+            color: rgba(255,255,255,0.9);
+            font-weight: 500;
+        }
+
+        .voice-toggle input[type="checkbox"]:checked ~ .toggle-label {
+            color: white;
+        }
+
+        #voice-btn.listening {
+            background: #ef4444 !important;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
         }
 
         .chat-messages {
@@ -201,7 +274,14 @@
         <!-- Left Side - Chat -->
         <div class="chat-section">
             <div class="chat-header">
-                💬 Natural Language Commands
+                <div class="header-title">💬 Chat with BinBot</div>
+                <div class="voice-controls">
+                    <label class="voice-toggle">
+                        <input type="checkbox" id="voice-mode-toggle">
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-label">🎤 Voice Mode</span>
+                    </label>
+                </div>
             </div>
             <div class="chat-messages" id="chat-messages">
                 <div class="message assistant">
@@ -210,6 +290,7 @@
             </div>
             <div class="chat-input-area">
                 <input type="text" class="chat-input" id="chat-input" placeholder="Type a command..." onkeypress="if(event.key==='Enter') sendCommand()">
+                <button class="btn btn-secondary" onclick="toggleVoiceInput()" id="voice-btn" title="Voice Input">🎤</button>
                 <button class="btn btn-secondary" onclick="takePhoto()" title="Take Photo">📷</button>
                 <button class="btn btn-primary" onclick="sendCommand()">Send</button>
             </div>
@@ -232,6 +313,16 @@
         // Global state
         let currentBin = null;
         let chatSessionId = null;
+        let isVoiceModeEnabled = false;
+        let isListening = false;
+        let recognition = null;
+        let speechSynthesis = window.speechSynthesis;
+        let voiceProvider = 'browser'; // Will be loaded from config
+        let voiceConfig = null;
+
+        // Audio cache for faster repeated responses
+        const audioCache = new Map();
+        const MAX_CACHE_SIZE = 50;
 
         // API Configuration
         const API_BASE = window.location.origin;
@@ -240,6 +331,17 @@
         document.addEventListener('DOMContentLoaded', function() {
             // Generate session ID
             chatSessionId = 'session_' + Math.random().toString(36).substr(2, 9);
+
+            // Initialize voice configuration and recognition
+            initializeVoiceConfig();
+            initializeVoiceRecognition();
+
+            // Set up voice mode toggle
+            const voiceModeToggle = document.getElementById('voice-mode-toggle');
+            voiceModeToggle.addEventListener('change', function() {
+                isVoiceModeEnabled = this.checked;
+                console.log('Voice mode:', isVoiceModeEnabled ? 'enabled' : 'disabled');
+            });
         });
 
         // API Helper Functions
@@ -295,6 +397,9 @@
                 if (data.success) {
                     const response = data.data?.response || data.data?.message || 'Command processed successfully';
                     addChatMessage(response, false);
+
+                    // Speak the response if voice mode is enabled
+                    speakResponse(response);
 
                     // Update current bin based on the operation performed
                     await updateCurrentBinFromCommand(command, response, data.data);
@@ -696,6 +801,236 @@
                 console.error('Error loading bin contents:', error);
                 binContent.innerHTML = `<div class="empty-state">Failed to load bin contents: ${error.message}</div>`;
             }
+        }
+
+        // Voice Recognition Functions
+        function initializeVoiceRecognition() {
+            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                recognition = new SpeechRecognition();
+
+                recognition.continuous = false;
+                recognition.interimResults = false;
+                recognition.lang = 'en-US';
+
+                recognition.onstart = function() {
+                    isListening = true;
+                    const voiceBtn = document.getElementById('voice-btn');
+                    voiceBtn.classList.add('listening');
+                    voiceBtn.innerHTML = '🔴';
+                    console.log('Voice recognition started');
+                };
+
+                recognition.onresult = function(event) {
+                    const transcript = event.results[0][0].transcript;
+                    console.log('Voice input:', transcript);
+
+                    // Put the transcript in the input field
+                    const chatInput = document.getElementById('chat-input');
+                    chatInput.value = transcript;
+
+                    // Automatically send the command
+                    sendCommand();
+                };
+
+                recognition.onerror = function(event) {
+                    console.error('Voice recognition error:', event.error);
+                    stopListening();
+
+                    if (event.error === 'not-allowed') {
+                        addChatMessage('❌ Microphone permission denied. Please allow microphone access.', false);
+                    } else if (event.error === 'no-speech') {
+                        addChatMessage('🎤 No speech detected. Try again.', false);
+                    } else {
+                        addChatMessage(`❌ Voice recognition error: ${event.error}`, false);
+                    }
+                };
+
+                recognition.onend = function() {
+                    stopListening();
+                };
+
+            } else {
+                console.log('Speech recognition not supported');
+            }
+        }
+
+        function toggleVoiceInput() {
+            if (!recognition) {
+                addChatMessage('❌ Voice recognition not supported on this browser', false);
+                return;
+            }
+
+            if (isListening) {
+                stopListening();
+            } else {
+                startListening();
+            }
+        }
+
+        function startListening() {
+            if (recognition && !isListening) {
+                try {
+                    recognition.start();
+                    addChatMessage('🎤 Listening... Speak your command', false);
+                } catch (error) {
+                    console.error('Error starting voice recognition:', error);
+                    addChatMessage('❌ Could not start voice recognition', false);
+                }
+            }
+        }
+
+        function stopListening() {
+            isListening = false;
+            const voiceBtn = document.getElementById('voice-btn');
+            voiceBtn.classList.remove('listening');
+            voiceBtn.innerHTML = '🎤';
+
+            if (recognition) {
+                recognition.stop();
+            }
+        }
+
+        // Initialize Voice Configuration
+        async function initializeVoiceConfig() {
+            try {
+                const response = await fetch(`${API_BASE}/voice/config`);
+                const data = await response.json();
+
+                if (data.provider) {
+                    voiceProvider = data.provider;
+                    voiceConfig = data;
+                    console.log(`Voice provider: ${voiceProvider}`, data.current_settings);
+                } else {
+                    voiceProvider = 'browser'; // fallback
+                }
+            } catch (error) {
+                console.error('Failed to load voice config:', error);
+                voiceProvider = 'browser'; // fallback
+            }
+        }
+
+        // Speak Response (Text-to-Speech)
+        async function speakResponse(text) {
+            if (!isVoiceModeEnabled) return;
+            if (!text || text.trim().length === 0) return;
+
+            // Clean up the text for speech
+            const cleanText = text
+                .replace(/[📦🔧✅❌💡📷🎤🔴]/g, '') // Remove emojis
+                .replace(/\*\*/g, '') // Remove markdown bold
+                .replace(/`[^`]*`/g, '') // Remove code blocks
+                .replace(/\n+/g, '. ') // Replace newlines with periods
+                .trim();
+
+            if (!cleanText) return;
+
+            try {
+                if (voiceProvider === 'openai') {
+                    await speakWithOpenAI(cleanText);
+                } else {
+                    await speakWithBrowser(cleanText);
+                }
+            } catch (error) {
+                console.error('Error in speech synthesis:', error);
+                // Fallback to browser TTS
+                if (voiceProvider === 'openai') {
+                    await speakWithBrowser(cleanText);
+                }
+            }
+        }
+
+        // OpenAI TTS Implementation with caching
+        async function speakWithOpenAI(text) {
+            try {
+                // Check cache first for faster repeated responses
+                const cacheKey = text.toLowerCase().trim();
+                if (audioCache.has(cacheKey)) {
+                    console.log('Using cached audio for:', text);
+                    const cachedAudio = audioCache.get(cacheKey);
+                    cachedAudio.currentTime = 0; // Reset to beginning
+                    await cachedAudio.play();
+                    return;
+                }
+
+                const response = await fetch(`${API_BASE}/voice/tts`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        text: text
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success && result.audio_data) {
+                    // Convert base64 to audio blob
+                    const audioData = atob(result.audio_data);
+                    const audioArray = new Uint8Array(audioData.length);
+                    for (let i = 0; i < audioData.length; i++) {
+                        audioArray[i] = audioData.charCodeAt(i);
+                    }
+
+                    const audioBlob = new Blob([audioArray], {
+                        type: result.audio_format === 'opus' ? 'audio/ogg' : 'audio/mpeg'
+                    });
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    const audio = new Audio(audioUrl);
+
+                    // Cache the audio for faster repeated responses
+                    if (audioCache.size >= MAX_CACHE_SIZE) {
+                        // Remove oldest entry
+                        const firstKey = audioCache.keys().next().value;
+                        const oldAudio = audioCache.get(firstKey);
+                        URL.revokeObjectURL(oldAudio.src);
+                        audioCache.delete(firstKey);
+                    }
+                    audioCache.set(cacheKey, audio);
+
+                    await audio.play();
+                    console.log(`OpenAI TTS played: ${result.voice} voice, ${result.model} model`);
+                } else {
+                    throw new Error(result.message || 'OpenAI TTS failed');
+                }
+            } catch (error) {
+                console.error('OpenAI TTS error:', error);
+                throw error;
+            }
+        }
+
+        // Browser TTS Implementation
+        async function speakWithBrowser(text) {
+            return new Promise((resolve, reject) => {
+                if (!speechSynthesis) {
+                    reject(new Error('Browser TTS not supported'));
+                    return;
+                }
+
+                // Cancel any ongoing speech
+                speechSynthesis.cancel();
+
+                const utterance = new SpeechSynthesisUtterance(text);
+
+                // Use config settings if available
+                if (voiceConfig && voiceConfig.current_settings) {
+                    const settings = voiceConfig.current_settings;
+                    utterance.rate = settings.tts_rate || 0.9;
+                    utterance.pitch = settings.tts_pitch || 1.0;
+                    utterance.volume = settings.tts_volume || 0.8;
+                } else {
+                    utterance.rate = 0.9;
+                    utterance.pitch = 1.0;
+                    utterance.volume = 0.8;
+                }
+
+                utterance.onend = () => resolve();
+                utterance.onerror = (error) => reject(error);
+
+                speechSynthesis.speak(utterance);
+                console.log('Browser TTS played');
+            });
         }
     </script>
 </body>
