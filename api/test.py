@@ -115,6 +115,76 @@ async def list_test_items():
         )
 
 
+@router.get("/bin/{bin_id}/items", response_model=StandardResponse)
+async def list_bin_items(bin_id: str):
+    """List all items in a specific bin"""
+    try:
+        if db_client.inventory_collection is None:
+            raise HTTPException(status_code=500, detail="Database not initialized")
+
+        # Query for items in the specific bin
+        results = db_client.inventory_collection.get(
+            where={"bin_id": bin_id},
+            include=['metadatas', 'documents']
+        )
+
+        if not results or not results['ids']:
+            return StandardResponse(
+                success=True,
+                data={
+                    "message": f"No items found in bin {bin_id}",
+                    "bin_id": bin_id,
+                    "items": [],
+                    "total_count": 0
+                }
+            )
+
+        # Process results
+        items = []
+        for i in range(len(results['ids'])):
+            metadata = results['metadatas'][i] if results['metadatas'] else {}
+            document = results['documents'][i] if results['documents'] else ""
+
+            # Parse image information from ChromaDB metadata
+            images_json = metadata.get('images_json', '')
+            images = images_json.split(',') if images_json else []
+            images = [img.strip() for img in images if img.strip()]  # Clean up empty strings
+
+            items.append({
+                "id": results['ids'][i],
+                "name": metadata.get('name', ''),
+                "description": metadata.get('description', ''),
+                "bin_id": metadata.get('bin_id', ''),
+                "created_at": metadata.get('created_at', ''),
+                "embedding_model": metadata.get('embedding_model', 'unknown'),
+                "document": document,
+                "images": images,
+                "images_count": metadata.get('images_count', 0),
+                "primary_image": metadata.get('primary_image', '')
+            })
+
+        return StandardResponse(
+            success=True,
+            data={
+                "message": f"Found {len(items)} items in bin {bin_id}",
+                "bin_id": bin_id,
+                "items": items,
+                "total_count": len(items)
+            }
+        )
+
+    except Exception as e:
+        error_detail = ErrorDetail(
+            code="BIN_ITEMS_ERROR",
+            message=f"Failed to list items in bin {bin_id}",
+            details={"error": str(e), "bin_id": bin_id}
+        )
+        return StandardResponse(
+            success=False,
+            error=error_detail
+        )
+
+
 @router.get("/stats", response_model=StandardResponse)
 async def get_collection_stats():
     """Get ChromaDB collection statistics"""

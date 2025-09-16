@@ -95,9 +95,19 @@ bulk.set_dependencies(db_client, embedding_service)
 nlp.set_dependencies(db_client, embedding_service, llm_client, vision_service, image_storage)
 images.set_dependencies(db_client, image_storage, vision_service, embedding_service)
 
+@app.get("/")
+async def main_page():
+    """Serve the main application page"""
+    return FileResponse("frontend/main.html")
+
 @app.get("/test")
 async def test_page():
     """Serve the test page"""
+    return FileResponse("frontend/index.html")
+
+@app.get("/admin")
+async def admin_page():
+    """Serve the admin page (alias for test)"""
     return FileResponse("frontend/index.html")
 
 @app.exception_handler(Exception)

@@ -78,9 +78,12 @@ class LLMClient:
         """Generate chat completion using the available LLM provider"""
         if self.provider == "openai" and self.openai_client:
             try:
+                # Get model from config, fallback to gpt-4
+                model = self.config.get("llm", {}).get("openai", {}).get("model", "gpt-4")
+
                 # Prepare the request parameters
                 request_params = {
-                    "model": "gpt-3.5-turbo",
+                    "model": model,
                     "messages": messages,
                     "temperature": temperature,
                     "max_tokens": max_tokens

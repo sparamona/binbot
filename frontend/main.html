@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BinBot - Smart Inventory Management</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f1f5f9;
+            color: #334155;
+            line-height: 1.6;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Main Layout - Two Column */
+        .main-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            height: 100vh;
+            gap: 1rem;
+            padding: 1rem;
+        }
+
+        /* Left Side - Chat */
+        .chat-section {
+            background: white;
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            background: #3b82f6;
+            color: white;
+            padding: 1rem;
+            font-weight: 600;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 1rem;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .message {
+            padding: 0.75rem 1rem;
+            border-radius: 1rem;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+
+        .message.user {
+            background: #3b82f6;
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 0.25rem;
+        }
+
+        .message.assistant {
+            background: #f1f5f9;
+            color: #334155;
+            align-self: flex-start;
+            border-bottom-left-radius: 0.25rem;
+        }
+
+        .chat-input-area {
+            padding: 1rem;
+            border-top: 1px solid #e2e8f0;
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 0.75rem;
+            border: 1px solid #d1d5db;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            outline: none;
+        }
+
+        .chat-input:focus {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .btn {
+            padding: 0.75rem 1rem;
+            border: none;
+            border-radius: 0.5rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.875rem;
+        }
+
+        .btn-primary {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #2563eb;
+        }
+
+        .btn-secondary {
+            background: #6b7280;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #4b5563;
+        }
+
+        /* Right Side - Current Bin */
+        .bin-section {
+            background: white;
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .bin-header {
+            background: #10b981;
+            color: white;
+            padding: 1rem;
+            font-weight: 600;
+        }
+
+        .bin-content {
+            flex: 1;
+            padding: 1rem;
+            overflow-y: auto;
+        }
+
+        .bin-item {
+            padding: 0.75rem;
+            background: #f8fafc;
+            border-radius: 0.5rem;
+            border: 1px solid #e2e8f0;
+            margin-bottom: 0.5rem;
+        }
+
+        .bin-item-name {
+            font-weight: 500;
+            margin-bottom: 0.25rem;
+        }
+
+        .bin-item-description {
+            font-size: 0.875rem;
+            color: #64748b;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: #64748b;
+            padding: 2rem;
+        }
+
+        /* Mobile Responsive */
+        @media (max-width: 768px) {
+            .main-container {
+                grid-template-columns: 1fr;
+                grid-template-rows: 1fr 1fr;
+                gap: 0.5rem;
+                padding: 0.5rem;
+            }
+            
+            .chat-messages {
+                padding: 0.75rem;
+            }
+            
+            .chat-input-area {
+                padding: 0.75rem;
+            }
+            
+            .bin-content {
+                padding: 0.75rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <!-- Left Side - Chat -->
+        <div class="chat-section">
+            <div class="chat-header">
+                💬 Natural Language Commands
+            </div>
+            <div class="chat-messages" id="chat-messages">
+                <div class="message assistant">
+                    Welcome! Try commands like "add screws to bin 5" or "search for arduino"
+                </div>
+            </div>
+            <div class="chat-input-area">
+                <input type="text" class="chat-input" id="chat-input" placeholder="Type a command..." onkeypress="if(event.key==='Enter') sendCommand()">
+                <button class="btn btn-secondary" onclick="takePhoto()" title="Take Photo">📷</button>
+                <button class="btn btn-primary" onclick="sendCommand()">Send</button>
+            </div>
+        </div>
+
+        <!-- Right Side - Current Bin -->
+        <div class="bin-section">
+            <div class="bin-header" id="bin-header">
+                📦 Current Bin: None Selected
+            </div>
+            <div class="bin-content" id="bin-content">
+                <div class="empty-state">
+                    No bin selected. Use a command like "show bin 3" to view bin contents.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global state
+        let currentBin = null;
+        let chatSessionId = null;
+
+        // API Configuration
+        const API_BASE = window.location.origin;
+
+        // Initialize app
+        document.addEventListener('DOMContentLoaded', function() {
+            // Generate session ID
+            chatSessionId = 'session_' + Math.random().toString(36).substr(2, 9);
+        });
+
+        // API Helper Functions
+        async function apiCall(endpoint, options = {}) {
+            try {
+                const url = endpoint.startsWith('/') ? `${API_BASE}${endpoint}` : endpoint;
+                const response = await fetch(url, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    },
+                    ...options
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                return await response.json();
+            } catch (error) {
+                console.error('API call failed:', error);
+                throw error;
+            }
+        }
+
+        function addChatMessage(message, isUser) {
+            const messagesContainer = document.getElementById('chat-messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isUser ? 'user' : 'assistant'}`;
+            messageDiv.textContent = message;
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        async function sendCommand() {
+            const input = document.getElementById('chat-input');
+            const command = input.value.trim();
+            if (!command) return;
+
+            // Add user message
+            addChatMessage(command, true);
+            input.value = '';
+
+            try {
+                const data = await apiCall('/nlp/command', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        command: command,
+                        session_id: chatSessionId
+                    })
+                });
+
+                if (data.success) {
+                    const response = data.data?.response || data.data?.message || 'Command processed successfully';
+                    addChatMessage(response, false);
+
+                    // Update current bin based on the operation performed
+                    await updateCurrentBinFromCommand(command, response, data.data);
+
+                } else {
+                    throw new Error(data.error?.message || 'Command failed');
+                }
+            } catch (error) {
+                if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+                    addChatMessage('❌ Backend server not running. Please start the server.', false);
+                } else {
+                    addChatMessage(`❌ Error: ${error.message}`, false);
+                }
+            }
+        }
+
+        async function updateCurrentBinFromCommand(command, response, responseData) {
+            try {
+                const commandLower = command.toLowerCase();
+                const responseLower = response.toLowerCase();
+
+                // Extract bin IDs from various patterns
+                const extractBinId = (text) => {
+                    // Match patterns like "bin 3", "bin number 5", "to bin 2", etc.
+                    const patterns = [
+                        /(?:bin\s+(?:number\s+)?|to\s+bin\s+)(\w+)/i,
+                        /(?:^|\s)(\d+)(?:\s|$)/,  // standalone numbers
+                        /bin\s*[:\-]?\s*(\w+)/i
+                    ];
+
+                    for (const pattern of patterns) {
+                        const match = text.match(pattern);
+                        if (match) return match[1];
+                    }
+                    return null;
+                };
+
+                let targetBin = null;
+
+                // 1. ADD OPERATIONS - update to the bin where items were added
+                if (commandLower.includes('add') || responseLower.includes('added')) {
+                    targetBin = extractBinId(command) || extractBinId(response);
+                }
+
+                // 2. LIST/SHOW OPERATIONS - update to the bin being viewed
+                else if (commandLower.includes('list') || commandLower.includes('show') ||
+                         commandLower.includes('what') || responseLower.includes('contains')) {
+                    targetBin = extractBinId(command) || extractBinId(response);
+                }
+
+                // 3. MOVE OPERATIONS - update to the destination bin
+                else if (commandLower.includes('move') || responseLower.includes('moved')) {
+                    // For move operations, prefer "to bin X" pattern for destination
+                    const toBinMatch = command.match(/to\s+bin\s+(\w+)/i) || response.match(/to\s+bin\s+(\w+)/i);
+                    if (toBinMatch) {
+                        targetBin = toBinMatch[1];
+                    } else {
+                        // Fallback to any bin mentioned
+                        targetBin = extractBinId(command) || extractBinId(response);
+                    }
+                }
+
+                // 4. REMOVE OPERATIONS - update to the bin where items were removed from
+                else if (commandLower.includes('remove') || commandLower.includes('delete') ||
+                         responseLower.includes('removed') || responseLower.includes('deleted')) {
+                    targetBin = extractBinId(command) || extractBinId(response);
+                }
+
+                // 5. SEARCH OPERATIONS - if search mentions a specific bin
+                else if (commandLower.includes('search') || commandLower.includes('find')) {
+                    const binInSearch = extractBinId(command);
+                    if (binInSearch) {
+                        targetBin = binInSearch;
+                    }
+                }
+
+                // Update current bin if we found a target bin
+                if (targetBin) {
+                    console.log(`Updating current bin to: ${targetBin} (from command: "${command}")`);
+                    await updateCurrentBin(targetBin);
+                } else {
+                    console.log(`No bin detected in command: "${command}" or response: "${response}"`);
+                }
+
+            } catch (error) {
+                console.error('Error updating current bin from command:', error);
+                // Don't show error to user, just log it
+            }
+        }
+
+        function takePhoto() {
+            // Placeholder for photo functionality
+            addChatMessage('📷 Photo feature will be implemented', false);
+        }
+
+        async function updateCurrentBin(binId) {
+            currentBin = binId;
+            const binHeader = document.getElementById('bin-header');
+            const binContent = document.getElementById('bin-content');
+
+            binHeader.textContent = `📦 Current Bin: ${binId}`;
+            binContent.innerHTML = '<div style="text-align: center; padding: 1rem;">Loading bin contents...</div>';
+
+            try {
+                // Use the new efficient bin-specific endpoint
+                const data = await apiCall(`/test/bin/${binId}/items`);
+
+                if (data.success) {
+                    const binItems = data.data.items || [];
+
+                    console.log(`Items in bin ${binId}:`, binItems);
+
+                    if (binItems.length === 0) {
+                        binContent.innerHTML = '<div class="empty-state">This bin is empty</div>';
+                    } else {
+                        binContent.innerHTML = binItems.map(item => `
+                            <div class="bin-item">
+                                <div class="bin-item-name">${item.name}</div>
+                                <div class="bin-item-description">${item.description || 'No description'}</div>
+                                <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.25rem;">
+                                    Item ID: ${item.id}
+                                    ${item.images_count > 0 ? ` | 📷 ${item.images_count} image(s)` : ''}
+                                </div>
+                            </div>
+                        `).join('');
+                    }
+                } else {
+                    throw new Error(data.error?.message || 'Failed to retrieve bin items');
+                }
+            } catch (error) {
+                console.error('Error loading bin contents:', error);
+                binContent.innerHTML = `<div class="empty-state">Failed to load bin contents: ${error.message}</div>`;
+            }
+        }
+    </script>
+</body>
+</html>

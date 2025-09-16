@@ -129,14 +129,22 @@ class ConversationHistory:
 - "find my electronics" → call search_for_items with query="electronics"
 - "where is the sudoku" → call search_for_items with query="sudoku"
 
-⚠️ IMPORTANT GUIDELINES:
+🔄 TWO-PART COMMANDS (VERY IMPORTANT):
+When a user provides incomplete information in multiple messages, use conversation context to complete the command:
+- User: "add a usb cable" → Ask: "Which bin should I add the USB cable to?"
+- User: "3" → IMMEDIATELY call add_items_to_bin with items=["usb cable"], bin_id="3"
+- User: "move the screws" → Ask: "Which bin should I move the screws from and to?"
+- User: "from 2 to 5" → call move_items_between_bins with items=["screws"], source_bin_id="2", target_bin_id="5"
+
+⚠️ CRITICAL GUIDELINES:
+- ALWAYS call functions when you have enough information - don't just provide conversational responses
+- Use conversation context to complete commands across multiple messages
+- When the user provides missing information (like a bin number), IMMEDIATELY execute the function
 - Be flexible with natural language variations
 - Handle casual language and different ways of expressing the same intent
-- Use conversation context to resolve ambiguous references like "also add" or "that bin"
 - Parse item lists naturally (handle "and", commas, multiple items)
-- Extract bin numbers from various formats ("bin 3", "bin number 5", "the 3rd bin")
-- If information is missing or ambiguous, ask for clarification in a helpful way
-- Always call the appropriate function - don't just provide text responses about inventory"""
+- Extract bin numbers from various formats ("bin 3", "bin number 5", "the 3rd bin", or just "3")
+- If information is missing, ask for clarification BUT then execute when provided"""
 
     def clear(self) -> None:
         """Clear all messages from the conversation"""
@@ -194,10 +202,10 @@ class ConversationManager:
         return self.get_messages_for_llm(session_id)
     
     def get_messages_for_llm(self, session_id: str) -> List[Dict[str, str]]:
-        """Get conversation messages formatted for LLM (limited to last 3 messages)"""
+        """Get conversation messages formatted for LLM (limited to last 5 messages for better context)"""
         logger.debug(f"Getting messages for LLM for session {session_id}")
         conversation = self.get_conversation(session_id)
-        messages = conversation.get_messages(include_system_prompt=True, max_messages=3)
+        messages = conversation.get_messages(include_system_prompt=True, max_messages=5)
         logger.debug(f"Returning {len(messages)} messages to LLM for session {session_id}")
         return messages
     

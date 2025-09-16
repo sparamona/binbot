@@ -53,7 +53,7 @@ class Settings:
             "llm": {
                 "provider": "openai",
                 "openai": {
-                    "model": "gpt-3.5-turbo",
+                    "model": "gpt-4",
                     "embedding_model": "text-embedding-ada-002",
                     "embedding_dimension": 1536
                 }
