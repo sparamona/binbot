@@ -385,9 +385,277 @@
             }
         }
 
-        function takePhoto() {
-            // Placeholder for photo functionality
-            addChatMessage('📷 Photo feature will be implemented', false);
+        async function takePhoto() {
+            try {
+                // Check if camera is supported
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    addChatMessage('❌ Camera not supported on this device', false);
+                    return;
+                }
+
+                addChatMessage('📷 Opening camera...', false);
+
+                // Get camera stream
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: 'environment', // Use back camera if available
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    }
+                });
+
+                // Create camera modal
+                showCameraModal(stream);
+
+            } catch (error) {
+                console.error('Camera error:', error);
+                if (error.name === 'NotAllowedError') {
+                    addChatMessage('❌ Camera permission denied. Please allow camera access and try again.', false);
+                } else if (error.name === 'NotFoundError') {
+                    addChatMessage('❌ No camera found on this device', false);
+                } else {
+                    addChatMessage(`❌ Camera error: ${error.message}`, false);
+                }
+            }
+        }
+
+        function showCameraModal(stream) {
+            // Create camera modal
+            const modal = document.createElement('div');
+            modal.id = 'camera-modal';
+            modal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0,0,0,0.9);
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                z-index: 2000;
+            `;
+
+            modal.innerHTML = `
+                <div style="text-align: center; color: white; margin-bottom: 1rem;">
+                    <h2>Take Photo for Inventory</h2>
+                    <p>Position items in the frame and click capture</p>
+                </div>
+                <video id="camera-video" autoplay playsinline style="
+                    max-width: 90vw;
+                    max-height: 60vh;
+                    border-radius: 0.5rem;
+                    background: black;
+                "></video>
+                <canvas id="camera-canvas" style="display: none;"></canvas>
+                <div style="margin-top: 1rem; display: flex; gap: 1rem;">
+                    <button id="capture-btn" style="
+                        padding: 1rem 2rem;
+                        background: #3b82f6;
+                        color: white;
+                        border: none;
+                        border-radius: 0.5rem;
+                        font-size: 1rem;
+                        cursor: pointer;
+                    ">📷 Capture</button>
+                    <button id="cancel-camera-btn" style="
+                        padding: 1rem 2rem;
+                        background: #6b7280;
+                        color: white;
+                        border: none;
+                        border-radius: 0.5rem;
+                        font-size: 1rem;
+                        cursor: pointer;
+                    ">❌ Cancel</button>
+                </div>
+                <div style="margin-top: 0.5rem;">
+                    <label style="color: white; font-size: 0.875rem;">
+                        <input type="checkbox" id="specify-bin-checkbox" style="margin-right: 0.5rem;">
+                        Specify bin for smart analysis
+                    </label>
+                </div>
+                <div id="bin-input-container" style="display: none; margin-top: 0.5rem;">
+                    <input type="text" id="photo-bin-input" placeholder="Enter bin ID (e.g., 3, A1)" style="
+                        padding: 0.5rem;
+                        border: 1px solid #d1d5db;
+                        border-radius: 0.25rem;
+                        font-size: 0.875rem;
+                    ">
+                </div>
+            `;
+
+            document.body.appendChild(modal);
+
+            // Set up video stream
+            const video = document.getElementById('camera-video');
+            video.srcObject = stream;
+
+            // Handle bin input toggle
+            const specifyBinCheckbox = document.getElementById('specify-bin-checkbox');
+            const binInputContainer = document.getElementById('bin-input-container');
+            specifyBinCheckbox.addEventListener('change', function() {
+                binInputContainer.style.display = this.checked ? 'block' : 'none';
+            });
+
+            // Handle capture
+            document.getElementById('capture-btn').addEventListener('click', function() {
+                capturePhoto(stream);
+            });
+
+            // Handle cancel
+            document.getElementById('cancel-camera-btn').addEventListener('click', function() {
+                closeCameraModal(stream);
+            });
+
+            // Close on escape key
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    closeCameraModal(stream);
+                }
+            });
+        }
+
+        async function capturePhoto(stream) {
+            try {
+                const video = document.getElementById('camera-video');
+                const canvas = document.getElementById('camera-canvas');
+                const ctx = canvas.getContext('2d');
+
+                // Set canvas size to match video
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+
+                // Draw video frame to canvas
+                ctx.drawImage(video, 0, 0);
+
+                // Convert to blob
+                canvas.toBlob(async function(blob) {
+                    try {
+                        // Get bin ID if specified
+                        const specifyBin = document.getElementById('specify-bin-checkbox').checked;
+                        const binId = specifyBin ? document.getElementById('photo-bin-input').value.trim() : '';
+
+                        // Close camera modal
+                        closeCameraModal(stream);
+
+                        // Show processing message
+                        addChatMessage('📷 Photo captured! Analyzing image...', false);
+
+                        // Upload and analyze image
+                        await uploadAndAnalyzeImage(blob, binId);
+
+                    } catch (error) {
+                        console.error('Error processing photo:', error);
+                        addChatMessage(`❌ Error processing photo: ${error.message}`, false);
+                    }
+                }, 'image/jpeg', 0.8);
+
+            } catch (error) {
+                console.error('Error capturing photo:', error);
+                addChatMessage(`❌ Error capturing photo: ${error.message}`, false);
+            }
+        }
+
+        function closeCameraModal(stream) {
+            // Stop camera stream
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+
+            // Remove modal
+            const modal = document.getElementById('camera-modal');
+            if (modal) {
+                modal.remove();
+            }
+        }
+
+        async function uploadAndAnalyzeImage(imageBlob, binId = '') {
+            try {
+                // Create form data using the same format as the working test page
+                const formData = new FormData();
+                formData.append('file', imageBlob, 'camera-photo.jpg');  // Use 'file' not 'image'
+
+                if (binId) {
+                    formData.append('bin_id', binId);
+                    formData.append('auto_analyze', 'true');  // Enable auto-analysis
+
+                    // Use the upload-to-bin endpoint that works in the test page
+                    const response = await fetch(`${API_BASE}/images/upload-to-bin`, {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        const result = data.data;
+
+                        // Show analysis results
+                        if (result.items_added && result.items_added.length > 0) {
+                            const itemNames = result.items_added.map(item => item.name).join(', ');
+                            addChatMessage(`✅ Image analyzed! Added ${result.items_added.length} item(s) to bin ${binId}: ${itemNames}`, false);
+
+                            // Update current bin display
+                            await updateCurrentBin(binId);
+                        } else if (result.analysis) {
+                            addChatMessage(`📷 Image uploaded to bin ${binId}. Analysis: ${result.analysis}`, false);
+                            await updateCurrentBin(binId);
+                        } else {
+                            addChatMessage(`📷 Image uploaded to bin ${binId}, but no items were automatically identified. You can add items manually using chat commands.`, false);
+                            await updateCurrentBin(binId);
+                        }
+
+                        // Show image ID for reference
+                        if (result.image_id) {
+                            console.log('Image uploaded with ID:', result.image_id);
+                        }
+
+                    } else {
+                        throw new Error(data.error?.message || 'Image analysis failed');
+                    }
+
+                } else {
+                    // No bin specified - use the analyze-for-conversation endpoint like the test page
+                    const response = await fetch(`${API_BASE}/images/analyze-for-conversation`, {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        const result = data.data;
+
+                        if (result.description) {
+                            addChatMessage(`📷 Image analyzed: ${result.description}`, false);
+                            addChatMessage('💡 Tip: Specify a bin ID when taking photos to automatically add identified items to your inventory.', false);
+                        } else {
+                            addChatMessage('📷 Image analyzed, but no clear description was generated. Try taking a clearer photo or specify a bin ID.', false);
+                        }
+
+                        // Show image ID for reference
+                        if (result.image_id) {
+                            console.log('Image analyzed with ID:', result.image_id);
+                        }
+
+                    } else {
+                        throw new Error(data.error?.message || 'Image analysis failed');
+                    }
+                }
+
+            } catch (error) {
+                console.error('Error uploading image:', error);
+                addChatMessage(`❌ Error analyzing image: ${error.message}`, false);
+            }
         }
 
         async function updateCurrentBin(binId) {
