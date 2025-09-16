@@ -23,14 +23,16 @@ db_client = None
 embedding_service = None
 llm_client = None
 vision_service = None
+image_storage = None
 
-def set_dependencies(db, embedding, llm=None, vision=None):
-    """Set the database, embedding service, LLM client, and vision service dependencies"""
-    global db_client, embedding_service, llm_client, vision_service
+def set_dependencies(db, embedding, llm=None, vision=None, storage=None):
+    """Set the database, embedding service, LLM client, vision service, and image storage dependencies"""
+    global db_client, embedding_service, llm_client, vision_service, image_storage
     db_client = db
     embedding_service = embedding
     llm_client = llm
     vision_service = vision
+    image_storage = storage
 
 router = APIRouter(prefix="/nlp", tags=["Natural Language Processing"])
 
@@ -38,6 +40,12 @@ class NLPCommandRequest(BaseModel):
     """Request model for natural language commands"""
     command: str
     session_id: Optional[str] = None
+
+class NLPCommandWithImageRequest(BaseModel):
+    """Request model for natural language commands with image context"""
+    command: str
+    session_id: Optional[str] = None
+    image_context: Optional[dict] = None
 
 class NLPCommandResponse(BaseModel):
     """Response model for natural language commands"""
@@ -78,7 +86,8 @@ async def process_natural_language_command(request: NLPCommandRequest):
             db_client=db_client,
             embedding_service=embedding_service,
             llm_client=llm_client,
-            vision_service=vision_service
+            vision_service=vision_service,
+            image_storage=image_storage
         )
         
         # Process the command
@@ -121,6 +130,79 @@ async def process_natural_language_command(request: NLPCommandRequest):
             details={"command": request.command, "error": str(e)}
         )
         return StandardResponse(success=False, error=error_detail)
+
+
+@router.post("/process-command", response_model=StandardResponse)
+async def process_command_with_image_context(request: NLPCommandWithImageRequest):
+    """
+    Process a natural language command with optional image context
+
+    This endpoint is used for conversational image upload where the AI
+    has already analyzed an image and the user is giving commands about
+    what to do with the identified items.
+    """
+    try:
+        if not db_client or not embedding_service or not llm_client:
+            raise HTTPException(status_code=500, detail="Service dependencies not initialized")
+
+        if not request.command.strip():
+            error_detail = ErrorDetail(
+                code="EMPTY_COMMAND",
+                message="Command cannot be empty",
+                details={"command": request.command}
+            )
+            return StandardResponse(success=False, error=error_detail)
+
+        # Initialize function-based command processor
+        processor = FunctionCommandProcessor(
+            db_client=db_client,
+            embedding_service=embedding_service,
+            llm_client=llm_client,
+            vision_service=vision_service,
+            image_storage=image_storage
+        )
+
+        # Process the command with image context
+        result = await processor.process_command(
+            command_text=request.command,
+            session_id=request.session_id,
+            image_context=request.image_context
+        )
+
+        # Format response
+        response_data = {
+            "response": result.message,
+            "command_processed": request.command,
+            "timestamp": datetime.now().isoformat()
+        }
+
+        if result.data:
+            response_data.update(result.data)
+
+        if result.success:
+            return StandardResponse(
+                success=True,
+                data=response_data
+            )
+        else:
+            error_detail = ErrorDetail(
+                code="COMMAND_FAILED",
+                message=result.message,
+                details={"command": request.command, "error": result.error}
+            )
+            return StandardResponse(success=False, error=error_detail)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error processing command with image context: {e}")
+        error_detail = ErrorDetail(
+            code="PROCESSING_ERROR",
+            message="Failed to process command",
+            details={"command": request.command, "error": str(e)}
+        )
+        return StandardResponse(success=False, error=error_detail)
+
 
 @router.get("/help", response_model=StandardResponse)
 async def get_nlp_help():

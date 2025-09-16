@@ -13,20 +13,24 @@
 │  │                                 │  │                                     │  │
 │  │      Quick Actions              │  │        📍 Bin 5 Contents            │  │
 │  │  ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐ │  │  ┌─────────────────────────────┐   │  │
-│  │  │ ➕  │ │ 🔍  │ │ ↔️  │ │ ➖  │ │  │  │ • screws (just added)       │   │  │
+│  │  │ ➕  │ │ 🔍  │ │ ↔️  │ │ ➖  │ │  │  │ • screws (just added) 📷    │   │  │
 │  │  │Add  │ │Search│ │Move │ │Remove│ │  │  │ • washers                   │   │  │
 │  │  └─────┘ └─────┘ └─────┘ └─────┘ │  │  │ • springs                   │   │  │
+│  │                                 │  │  │ • bolts 📷                  │   │  │
+│  │         � Image Upload         │  │  │ • nuts                      │   │  │
+│  │    [Drop image or click here]   │  │  │                             │   │  │
+│  │                                 │  │  │ Total: 5 items (2 w/images) │   │  │
 │  │                                 │  │  │ • bolts                     │   │  │
 │  │         Chat Interface          │  │  │ • nuts                      │   │  │
 │  │  ┌─────────────────────────────┐ │  │  │                             │   │  │
 │  │  │ User: add screws to bin 5   │ │  │  │ Total: 5 items              │   │  │
 │  │  │ Bot: ✅ Added screws to bin 5│ │  │  │ Last updated: 2 min ago     │   │  │
 │  │  │                             │ │  │  │                             │   │  │
-│  │  │ User: what's in bin 3?      │ │  │  │ [🔄 Refresh] [📋 Full List] │   │  │
-│  │  │ Bot: 📦 Bin 3 contains:     │ │  │  └─────────────────────────────┘   │  │
-│  │  │ • nails • bolts • washers   │ │  │                                     │  │
-│  │  │                             │ │  │        Current Context              │  │
-│  │  │ User: move bolts to bin 7   │ │  │  📍 Working on: Bin 5               │  │
+│  │  │ User: what's in this image? │ │  │  │ [🔄 Refresh] [📋 Full List] │   │  │
+│  │  │ Bot: � I see a mouse, pen, │ │  │  │ [📷 Add Image] [🖼️ Gallery] │   │  │
+│  │  │ and coaster. Added to bin 4 │ │  │  └─────────────────────────────┘   │  │
+│  │  │                             │ │  │                                     │  │
+│  │  │ User: move bolts to bin 7   │ │  │        Current Context              │  │
 │  │  │ Bot: ✅ Moved bolts: 3→7     │ │  │  � Session: Active (15 min)       │  │
 │  │  │                             │ │  │  📝 Recent items: screws, bolts    │  │
 │  │  │ [Scroll for more...]        │ │  │                                     │  │
@@ -64,7 +68,9 @@
 
 #### Left Panel (60% width) - Actions & Chat
 - **Quick Actions Section**:
-  - 4 large action buttons in grid layout (Add, Search, Move, Remove)
+  - 6 action buttons in 2x3 grid layout (Add, Search, Smart Image Upload, Move, Remove, Images)
+  - **Smart Image Upload**: Camera icon - upload image to automatically identify and add items
+  - **Images**: Gallery icon - view and manage images associated with items
   - Prominent placement at top for easy access
   - Visual icons with clear labels
 
@@ -83,9 +89,12 @@
 #### Right Panel (40% width) - Current Bin View
 - **Current Bin Contents**: Primary focus showing live view of active bin
   - Shows up to 5 items with newest/changed items highlighted
+  - **Image indicators**: 📷 icon next to items that have associated images
   - Refresh button to update contents
   - "Full List" button to see all items in modal
-  - Total item count and last updated timestamp
+  - **Add Image** button to associate images with bin or items
+  - **Gallery** button to view all images in current bin
+  - Total item count and image count displayed
   - Auto-updates when operations affect the displayed bin
 
 - **Current Context**: Shows session state and working bin
@@ -133,19 +142,26 @@
 └─────────────────────────────────┘
 ```
 
+
+
 ### Search Results Modal
 ```
-┌─────────────────────────────────────────┐
-│              Search Results             │
-├─────────────────────────────────────────┤
-│  🔍 Found 3 items for "screws":        │
-│                                         │
-│  📦 Bin 3: screws (95% match)          │
-│  📦 Bin 7: wood screws (87% match)     │
-│  📦 Bin 2: machine screws (82% match)  │
-│                                         │
-│           [Close Results]               │
-└─────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────┐
+│                  Search Results                     │
+├─────────────────────────────────────────────────────┤
+│  🔍 Found 3 items for "screws":                    │
+│                                                     │
+│  📦 Bin 3: screws (95% match) 📷                   │
+│     [🖼️ View Images] [📷 Add Image]                │
+│                                                     │
+│  📦 Bin 7: wood screws (87% match)                 │
+│     [📷 Add Image]                                  │
+│                                                     │
+│  📦 Bin 2: machine screws (82% match) 📷           │
+│     [🖼️ View Images] [📷 Add Image]                │
+│                                                     │
+│           [Close Results]                           │
+└─────────────────────────────────────────────────────┘
 ```
 
 ### Disambiguation Modal
@@ -170,23 +186,61 @@
 ├─────────────────────────────────────────────────────┤
 │  🔍 Filter: [_______________] 🔄 Refresh            │
 │                                                     │
-│  📋 All Items (5 total):                           │
+│  📋 All Items (5 total, 2 with images):            │
 │                                                     │
-│  • screws (just added) - Added 2 min ago           │
+│  • screws (just added) 📷 - Added 2 min ago        │
+│    [🖼️ View] [📷 Add] [✏️ Edit]                    │
 │  • washers - Added 1 day ago                       │
+│    [📷 Add Image] [✏️ Edit]                        │
 │  • springs - Added 3 days ago                      │
-│  • bolts - Added 1 week ago                        │
+│    [📷 Add Image] [✏️ Edit]                        │
+│  • bolts 📷 - Added 1 week ago                     │
+│    [🖼️ View] [📷 Add] [✏️ Edit]                    │
 │  • nuts - Added 1 week ago                         │
+│    [📷 Add Image] [✏️ Edit]                        │
 │                                                     │
 │  📊 Bin Statistics:                                 │
-│  • Total Items: 5                                  │
+│  • Total Items: 5 • Items with Images: 2           │
 │  • Last Activity: 2 minutes ago                    │
 │  • Most Common: Hardware items                     │
 │                                                     │
 │  🔧 Quick Actions:                                  │
-│  [➕ Add Item] [🔍 Search Similar] [↔️ Move All]    │
+│  [➕ Add Item] [� Smart Upload] [🖼️ Gallery]      │
+│  [�🔍 Search Similar] [↔️ Move All]                  │
 │                                                     │
 │                    [Close]                          │
+└─────────────────────────────────────────────────────┘
+```
+
+### Image Gallery Modal
+```
+┌─────────────────────────────────────────────────────┐
+│              🖼️ Image Gallery - Bin 5               │
+├─────────────────────────────────────────────────────┤
+│  📷 Images (3 total) | 🔍 Filter: [__________]     │
+│                                                     │
+│  ┌─────────────────────────────────────────────────┐ │
+│  │ ┌─────┐ ┌─────┐ ┌─────┐                       │ │
+│  │ │ 📷  │ │ 📷  │ │ 📷  │                       │ │
+│  │ │Thumb│ │Thumb│ │Thumb│                       │ │
+│  │ │ 1   │ │ 2   │ │ 3   │                       │ │
+│  │ └─────┘ └─────┘ └─────┘                       │ │
+│  │ screws  bolts   washers                        │ │
+│  │ 2m ago  1w ago  3d ago                         │ │
+│  └─────────────────────────────────────────────────┘ │
+│                                                     │
+│  Selected: screws image                             │
+│  ┌─────────────────────────────────────────────────┐ │
+│  │                                                 │ │
+│  │           [Large Image Preview]                 │ │
+│  │                                                 │ │
+│  └─────────────────────────────────────────────────┘ │
+│                                                     │
+│  🔧 Actions:                                        │
+│  [🔍 Analyze] [✏️ Edit Item] [🗑️ Delete]           │
+│  [📤 Download] [🔗 Copy Link]                      │
+│                                                     │
+│     [📷 Add New Image]              [Close]        │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -246,13 +300,13 @@
 ├─────────────────────────────────┤
 │      📦 Bin 5 Contents          │ ← PRIORITY: Always visible
 │  ┌─────────────────────────┐   │
-│  │ • screws (just added)   │   │
+│  │ • screws (just added) 📷│   │
 │  │ • washers               │   │
 │  │ • springs               │   │
-│  │ • bolts                 │   │
+│  │ • bolts 📷              │   │
 │  │ • nuts                  │   │
-│  │ Total: 5 items          │   │
-│  │ [🔄] [📋 Full List]     │   │
+│  │ Total: 5 items (2 w/📷) │   │
+│  │ [🔄] [📋] [📷] [🖼️]     │   │
 │  └─────────────────────────┘   │
 ├─────────────────────────────────┤
 │ 💬 Chat History [▼ Minimize]   │ ← Collapsible
@@ -265,7 +319,7 @@
 │ [        Type here...         ] │ ← Input area
 │ [🎤 Hold to Talk]  [📤 Send]   │
 ├─────────────────────────────────┤
-│ [➕Add] [🔍Search] [↔️Move] [➖] │ ← Bottom action bar
+│ [➕Add] [🔍Search] [📷Upload] [🖼️] │ ← Bottom action bar
 └─────────────────────────────────┘
 ```
 
@@ -307,6 +361,37 @@
 - **Primary Text**: #1f2937 (dark gray)
 - **Secondary Text**: #6b7280 (medium gray)
 - **Muted Text**: #9ca3af (light gray)
+
+## Image Handling Features
+
+### Simplified Image Upload Workflow
+1. **Upload Trigger**: User drags image to upload area or clicks to browse
+2. **Auto-Analysis**: System automatically analyzes image using AI vision
+3. **Chat Integration**: AI describes what it sees and adds image to conversation context
+4. **Natural Commands**: User can then use voice/text to decide what to do with identified items
+   - "add the mouse to bin 7"
+   - "put everything in bin 4"
+   - "just add the pen to bin 2"
+5. **Context Retention**: AI remembers image contents for follow-up commands
+6. **Automatic Association**: Images are linked to items when they're created
+
+### Image Search Integration
+- **Search Results**: Items with images show 📷 indicator in search results
+- **Image Preview**: Click image indicator to view thumbnail in search results
+- **Image Actions**: "View Images" and "Add Image" buttons for each search result
+- **Visual Context**: Images help users identify correct items when multiple matches exist
+
+### Post-Creation Image Association
+- **Add to Existing Items**: "📷 Add Image" button available for any item
+- **Multiple Images**: Items can have multiple associated images
+- **Primary Image**: First or designated image serves as primary thumbnail
+- **Image Management**: Edit, delete, or reorder images through gallery interface
+
+### Image Display Patterns
+- **List Views**: 📷 icon indicates items with images, count shows total images
+- **Gallery View**: Grid of thumbnails with item names and timestamps
+- **Detail View**: Large image preview with metadata and action buttons
+- **Search Integration**: Images appear in search results and help with disambiguation
 
 ## Interactive Elements
 
@@ -374,5 +459,16 @@
 - Debounce search input
 - Cache recent operations
 - Optimize voice processing
+- **Image Optimization**: Compress images, generate thumbnails, lazy load galleries
+- **Smart Caching**: Cache image analysis results, thumbnail generation
+- **Progressive Loading**: Load image previews before full resolution images
+
+### Image Technical Requirements
+- **File Support**: JPG, PNG, WEBP formats with size limits (max 10MB)
+- **Thumbnail Generation**: Small (150px), Medium (300px), Large (800px) variants
+- **AI Integration**: OpenAI Vision API for automatic item identification
+- **Storage**: Local filesystem with organized directory structure
+- **Metadata**: Track image dimensions, file size, creation date, associated items
+- **Security**: Validate file types, sanitize filenames, prevent malicious uploads
 
 Would you like me to modify any aspects of this wireframe or create additional detailed views for specific components?

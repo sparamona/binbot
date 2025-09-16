@@ -204,10 +204,36 @@
     <!-- Natural Language Interface -->
     <div class="section">
         <h2>💬 Natural Language Interface</h2>
+        <p style="color: #666; font-size: 14px; margin-bottom: 15px;">
+            Type commands or drag images here for AI analysis and inventory management
+        </p>
+
+        <!-- Image Drop Zone -->
+        <div id="nlp-image-drop-zone" style="
+            border: 2px dashed #007bff;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            background-color: #f8f9fa;
+            margin-bottom: 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        " onclick="document.getElementById('nlp-image-file').click()">
+            <div style="font-size: 24px; margin-bottom: 5px;">📷</div>
+            <div style="font-size: 14px; margin-bottom: 3px;">Drop image here or click to browse</div>
+            <div style="font-size: 12px; color: #666;">AI will analyze and add items to conversation</div>
+            <input type="file" id="nlp-image-file" accept="image/*" style="display: none;" onchange="handleNLPImageUpload()">
+        </div>
+
+        <!-- Image Preview -->
+        <div id="nlp-image-preview" style="display: none; text-align: center; margin-bottom: 15px;">
+            <img id="nlp-preview-img" style="max-width: 300px; max-height: 200px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+        </div>
+
         <div id="chat-container">
             <div id="chat-messages" style="height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; background: #f9f9f9;"></div>
             <div class="form-group">
-                <input type="text" id="chat-input" placeholder="Type a command like 'add bolts to bin 3' or 'search for electronics'..." style="width: 55%; display: inline-block;" />
+                <input type="text" id="chat-input" placeholder="Type a command like 'add bolts to bin 3' or 'search for electronics'..." style="width: 55%; display: inline-block;" onkeypress="if(event.key==='Enter') sendChatMessage()" />
                 <button class="btn" onclick="sendChatMessage()" style="width: 8%; display: inline-block;">Send</button>
                 <button class="btn" id="voice-btn" onclick="toggleVoiceInput()" style="background-color: #dc3545; width: 8%; display: inline-block;">🎤</button>
                 <button class="btn" onclick="showHelp()" style="background-color: #28a745; width: 8%; display: inline-block;">Help</button>
@@ -321,6 +347,8 @@
             <div id="smart-image-result" class="result"></div>
         </div>
 
+
+
         <!-- Remove Items Section -->
         <div class="section">
             <h2>🗑️ Remove Items</h2>
@@ -404,7 +432,7 @@
     </div>
 
     <script>
-        const API_BASE = '';  // Same origin
+        // API_BASE defined later in the file
 
 
 
@@ -459,16 +487,31 @@
             input.value = '';
 
             try {
-                const response = await fetch('/nlp/command', {
+                let endpoint = '/nlp/command';
+                let requestBody = {
+                    command: command,
+                    session_id: chatSessionId
+                };
+
+                // If we have image context, use the enhanced endpoint
+                if (conversationContext.imageId) {
+                    endpoint = '/nlp/process-command';
+                    requestBody.image_context = {
+                        image_id: conversationContext.imageId,
+                        analysis: conversationContext.imageAnalysis,
+                        identified_items: conversationContext.identifiedItems
+                    };
+                }
+
+
+
+                const response = await fetch(endpoint, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'Cache-Control': 'no-cache'
                     },
-                    body: JSON.stringify({
-                        command: command,
-                        session_id: chatSessionId
-                    })
+                    body: JSON.stringify(requestBody)
                 });
 
                 const result = await response.json();
@@ -518,10 +561,12 @@
 
                 // Show the actual response and start voice synthesis in parallel
                 if (result.success) {
+                    // Handle different response formats from different endpoints
+                    const responseMessage = result.data.response || result.data.message;
                     // Start voice synthesis immediately (don't wait)
-                    const voicePromise = speakResponse(result.data.message);
+                    const voicePromise = speakResponse(responseMessage);
                     // Update UI in parallel
-                    addChatMessage(`<strong>✅ Response:</strong><br>${result.data.message}`);
+                    addChatMessage(`<strong>✅ Response:</strong><br>${responseMessage}`);
                 } else {
                     const errorMessage = result.error ? result.error.message : 'Unknown error';
                     // Start voice synthesis immediately (don't wait)
@@ -531,10 +576,14 @@
                 }
             } catch (error) {
                 console.log('Caught exception:', error);
-                const errorMsg = `Error: ${error.message}`;
-                addChatMessage(`❌ ${errorMsg}`);
+                if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+                    addChatMessage(`❌ <strong>Backend server not running</strong><br>Please start the server with: <code>python app.py</code>`);
+                } else {
+                    const errorMsg = `Error: ${error.message}`;
+                    addChatMessage(`❌ ${errorMsg}`);
+                }
                 // Speak the error message
-                speakResponse(errorMsg);
+                speakResponse('Connection error. Backend server may not be running.');
             }
         }
 
@@ -892,6 +941,9 @@
                 }
             });
 
+            // Initialize NLP image drop zone
+            setupNLPImageDropZone();
+
             // Add keyboard shortcuts
             document.addEventListener('keydown', function(e) {
                 // Ctrl/Cmd + M for microphone
@@ -963,6 +1015,7 @@
         // Health Check
         async function checkHealth() {
             try {
+
                 const response = await fetch(`${API_BASE}/health`);
                 const data = await response.json();
 
@@ -990,7 +1043,20 @@
                     resultDiv.innerHTML = `<div class="status-error">❌ Health Check Failed</div><pre>${formatResponse(data)}</pre>`;
                 }
             } catch (error) {
-                document.getElementById('health-result').innerHTML = `<div class="status-error">❌ Connection Error</div><pre>Error: ${error.message}</pre>`;
+                document.getElementById('health-result').innerHTML = `
+                    <div class="status-error">❌ Connection Error</div>
+                    <p><strong>Backend server is not running.</strong></p>
+                    <p>To start the backend server:</p>
+                    <ol>
+                        <li>Install dependencies: <code>pip install -r requirements.txt</code></li>
+                        <li>Start server: <code>python app.py</code></li>
+                        <li>Server should run on <code>http://localhost:8000</code></li>
+                    </ol>
+                    <details>
+                        <summary>Error Details</summary>
+                        <pre>Error: ${error.message}</pre>
+                    </details>
+                `;
             }
         }
 
@@ -1084,7 +1150,15 @@
                     resultDiv.innerHTML = `<div class="status-error">❌ Search Error</div><pre>${formatResponse(data)}</pre>`;
                 }
             } catch (error) {
-                document.getElementById('search-result').innerHTML = `<div class="status-error">❌ Connection Error</div><pre>Error: ${error.message}</pre>`;
+                document.getElementById('search-result').innerHTML = `
+                    <div class="status-error">❌ Connection Error</div>
+                    <p><strong>Cannot connect to backend server.</strong></p>
+                    <p>Please ensure the backend server is running on <code>http://localhost:8000</code></p>
+                    <details>
+                        <summary>Error Details</summary>
+                        <pre>Error: ${error.message}</pre>
+                    </details>
+                `;
             }
         }
 
@@ -1988,6 +2062,114 @@
                 resultDiv.innerHTML = `<div class="status-error">❌ Connection Error</div><pre>Error: ${error.message}</pre>`;
             }
         }
+
+        // Image Upload Integration with NLP
+        let conversationContext = {
+            imageId: null,
+            imageAnalysis: null,
+            identifiedItems: []
+        };
+
+        const API_BASE = 'http://localhost:8000';
+
+        function setupNLPImageDropZone() {
+            const dropZone = document.getElementById('nlp-image-drop-zone');
+
+            // Highlight drop zone when dragging files over it
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropZone.addEventListener(eventName, function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dropZone.style.borderColor = '#0056b3';
+                    dropZone.style.backgroundColor = '#e3f2fd';
+                }, false);
+            });
+
+            // Remove highlight when not dragging
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dropZone.style.borderColor = '#007bff';
+                    dropZone.style.backgroundColor = '#f8f9fa';
+                }, false);
+            });
+
+            // Handle dropped files
+            dropZone.addEventListener('drop', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    document.getElementById('nlp-image-file').files = files;
+                    handleNLPImageUpload();
+                }
+            }, false);
+        }
+
+        async function handleNLPImageUpload() {
+            const fileInput = document.getElementById('nlp-image-file');
+            const preview = document.getElementById('nlp-image-preview');
+            const previewImg = document.getElementById('nlp-preview-img');
+
+            if (!fileInput.files || !fileInput.files[0]) {
+                return;
+            }
+
+            const file = fileInput.files[0];
+
+            // Show preview
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                previewImg.src = e.target.result;
+                preview.style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+
+            // Add message about analyzing image
+            addChatMessage('📷 Analyzing image...', false);
+
+            try {
+                // Upload and analyze image
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const response = await fetch(`${API_BASE}/images/analyze-for-conversation`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    conversationContext.imageId = data.data.image_id;
+                    conversationContext.imageAnalysis = data.data.analysis;
+                    conversationContext.identifiedItems = data.data.identified_items || [];
+
+                    addChatMessage(data.data.analysis, false);
+
+                    if (conversationContext.identifiedItems.length > 0) {
+                        addChatMessage(`I can help you add these items to your inventory. Just tell me which bin to put them in, or ask me to add specific items.`, false);
+                    }
+                } else {
+                    addChatMessage('❌ Sorry, I had trouble analyzing that image. Please try again.', false);
+                }
+            } catch (error) {
+                addChatMessage('❌ Connection error. Please check your connection and try again.', false);
+                console.error('Image analysis error:', error);
+            }
+        }
+
+
+
+
+
+
+
+
+
+
 
         // Helper functions
         function copyToClipboard(text) {

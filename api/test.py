@@ -77,6 +77,11 @@ async def list_test_items():
             metadata = all_results['metadatas'][i] if all_results['metadatas'] else {}
             document = all_results['documents'][i] if all_results['documents'] else ""
 
+            # Parse image information from ChromaDB metadata
+            images_json = metadata.get('images_json', '')
+            images = images_json.split(',') if images_json else []
+            images = [img.strip() for img in images if img.strip()]  # Clean up empty strings
+
             items.append({
                 "id": all_results['ids'][i],
                 "name": metadata.get('name', ''),
@@ -84,7 +89,10 @@ async def list_test_items():
                 "bin_id": metadata.get('bin_id', ''),
                 "created_at": metadata.get('created_at', ''),
                 "embedding_model": metadata.get('embedding_model', 'unknown'),
-                "document": document
+                "document": document,
+                "images": images,
+                "images_count": metadata.get('images_count', 0),
+                "primary_image": metadata.get('primary_image', '')
             })
 
         return StandardResponse(

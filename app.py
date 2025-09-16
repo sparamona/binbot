@@ -92,7 +92,7 @@ add.set_dependencies(db_client, embedding_service)
 remove.set_dependencies(db_client, embedding_service)
 move.set_dependencies(db_client, embedding_service)
 bulk.set_dependencies(db_client, embedding_service)
-nlp.set_dependencies(db_client, embedding_service, llm_client, vision_service)
+nlp.set_dependencies(db_client, embedding_service, llm_client, vision_service, image_storage)
 images.set_dependencies(db_client, image_storage, vision_service, embedding_service)
 
 @app.get("/test")

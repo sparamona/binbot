@@ -24,24 +24,27 @@ class FunctionCallResult:
     error: str = None
     function_name: str = None
     parameters: Dict[str, Any] = None
+    from_image_context: bool = False
 
 class FunctionCallHandler:
     """Handles execution of OpenAI function calls for inventory operations"""
 
-    def __init__(self, db_client, embedding_service, vision_service=None):
+    def __init__(self, db_client, embedding_service, vision_service=None, image_storage=None):
         self.db_client = db_client
         self.embedding_service = embedding_service
         self.vision_service = vision_service
+        self.image_storage = image_storage
         self.supported_functions = set(get_all_function_names())
     
-    async def execute_function_call(self, function_name: str, parameters: Dict[str, Any]) -> FunctionCallResult:
+    async def execute_function_call(self, function_name: str, parameters: Dict[str, Any], image_context: Optional[Dict] = None) -> FunctionCallResult:
         """
         Execute a function call with the given parameters.
-        
+
         Args:
             function_name: Name of the function to execute
             parameters: Parameters for the function call
-            
+            image_context: Optional image context for associating images with created items
+
         Returns:
             FunctionCallResult with the execution result
         """
@@ -57,13 +60,15 @@ class FunctionCallHandler:
         
         try:
             if function_name == "add_items_to_bin":
-                return await self._handle_add_items(parameters)
+                return await self._handle_add_items(parameters, image_context)
             elif function_name == "remove_items_from_bin":
                 return await self._handle_remove_items(parameters)
             elif function_name == "move_items_between_bins":
                 return await self._handle_move_items(parameters)
             elif function_name == "search_for_items":
                 return await self._handle_search_items(parameters)
+            elif function_name == "describe_image_content":
+                return await self._handle_describe_image_content(parameters)
             elif function_name == "list_bin_contents":
                 return await self._handle_list_bin(parameters)
             elif function_name == "add_items_from_image":
@@ -91,7 +96,7 @@ class FunctionCallHandler:
                 parameters=parameters
             )
     
-    async def _handle_add_items(self, parameters: Dict[str, Any]) -> FunctionCallResult:
+    async def _handle_add_items(self, parameters: Dict[str, Any], image_context: Optional[Dict] = None) -> FunctionCallResult:
         """Handle add_items_to_bin function call"""
         items = parameters.get("items", [])
         bin_id = parameters.get("bin_id")
@@ -149,9 +154,13 @@ class FunctionCallHandler:
                     bulk_result = self.db_client.add_documents_bulk(prepared_items)
 
                     if bulk_result.get("success", False):
-                        added_items = prepared_items
+                        added_items = bulk_result["added_items"]  # Use items with actual database IDs
                         for item in added_items:
                             logger.info(f"Added item '{item['name']}' to bin {bin_id}")
+
+                        # Associate image with created items if image context is provided
+                        if image_context and image_context.get('image_id') and self.image_storage:
+                            await self._associate_image_with_items(image_context['image_id'], added_items, bin_id)
                     else:
                         # If bulk add failed, add individual error for each item
                         error_msg = bulk_result.get("error", "Unknown bulk add error")
@@ -192,7 +201,8 @@ class FunctionCallHandler:
                 success=success,
                 data=result_data,
                 function_name="add_items_to_bin",
-                parameters=parameters
+                parameters=parameters,
+                from_image_context=bool(image_context and image_context.get('image_id'))
             )
 
         except Exception as e:
@@ -201,9 +211,45 @@ class FunctionCallHandler:
                 success=False,
                 error=f"Error adding items: {str(e)}",
                 function_name="add_items_to_bin",
-                parameters=parameters
+                parameters=parameters,
+                from_image_context=bool(image_context and image_context.get('image_id'))
             )
-    
+
+    async def _associate_image_with_items(self, image_id: str, added_items: List[Dict], bin_id: str):
+        """Associate an image with newly created items"""
+        try:
+            logger.info(f"Attempting to associate image {image_id} with {len(added_items)} items")
+
+            # For each created item, associate the image and set as primary
+            for item in added_items:
+                item_id = item['id']
+                logger.info(f"Processing item {item_id} for image association")
+
+                # Update image metadata to associate with this item
+                # For the first item, update the image metadata to point to it
+                if item == added_items[0]:  # Use first item as the primary association
+                    logger.info(f"Updating image metadata for primary item {item_id}")
+                    self.image_storage.update_image_metadata(image_id, {
+                        'item_id': item_id,
+                        'bin_id': bin_id
+                    })
+
+                # Associate image with item in database (includes retry mechanism)
+                logger.info(f"Calling add_image_to_item for item {item_id}")
+                success = self.db_client.add_image_to_item(
+                    item_id=item_id,
+                    image_id=image_id,
+                    set_as_primary=True
+                )
+
+                if success:
+                    logger.info(f"Successfully associated image {image_id} with item {item_id}")
+                else:
+                    logger.warning(f"Failed to associate image {image_id} with item {item_id}")
+
+        except Exception as e:
+            logger.error(f"Error associating image {image_id} with items: {e}")
+
     async def _handle_remove_items(self, parameters: Dict[str, Any]) -> FunctionCallResult:
         """Handle remove_items_from_bin function call"""
         items = parameters.get("items", [])
@@ -227,7 +273,8 @@ class FunctionCallHandler:
                 search_results = self.db_client.search_documents(
                     query=item,
                     limit=10,
-                    min_relevance=0.6
+                    min_relevance=0.6,
+                    embedding_service=self.embedding_service
                 )
 
                 # Filter by bin
@@ -326,7 +373,8 @@ class FunctionCallHandler:
                 search_results = self.db_client.search_documents(
                     query=item,
                     limit=10,
-                    min_relevance=0.6
+                    min_relevance=0.6,
+                    embedding_service=self.embedding_service
                 )
 
                 # Filter by source bin
@@ -340,13 +388,18 @@ class FunctionCallHandler:
                     item_to_move = bin_matches[0]
 
                     # Update the item's bin_id and description using ChromaDB collection update
+                    # Only include simple metadata types (str, int, float, bool)
+                    metadata = {
+                        'name': item_to_move['name'],
+                        'description': f"{item_to_move['name']} in bin {target_bin_id}",
+                        'bin_id': target_bin_id,
+                        'created_at': item_to_move.get('created_at', ''),
+                        'embedding_model': item_to_move.get('embedding_model', 'openai')
+                    }
+
                     self.db_client.inventory_collection.update(
                         ids=[item_to_move['id']],
-                        metadatas=[{
-                            **item_to_move,
-                            'bin_id': target_bin_id,
-                            'description': f"{item_to_move['name']} in bin {target_bin_id}"
-                        }]
+                        metadatas=[metadata]
                     )
                     success = True
 
@@ -430,7 +483,8 @@ class FunctionCallHandler:
             results = self.db_client.search_documents(
                 query=query,
                 limit=max_results,
-                min_relevance=0.6
+                min_relevance=0.6,
+                embedding_service=self.embedding_service
             )
 
             result_data = {
@@ -454,7 +508,24 @@ class FunctionCallHandler:
                 function_name="search_for_items",
                 parameters=parameters
             )
-    
+
+    async def _handle_describe_image_content(self, parameters: Dict[str, Any]) -> FunctionCallResult:
+        """Handle describe_image_content function call - returns image analysis from context"""
+        description = parameters.get("description", "")
+
+        # This function is called when the user asks about image content
+        # The actual image analysis should be provided in the conversation context
+        # This function just signals that we should use the image context
+        return FunctionCallResult(
+            success=True,
+            data={
+                "message": "Image content analysis requested",
+                "description": description
+            },
+            function_name="describe_image_content",
+            parameters=parameters
+        )
+
     async def _handle_list_bin(self, parameters: Dict[str, Any]) -> FunctionCallResult:
         """Handle list_bin_contents function call"""
         bin_id = parameters.get("bin_id")
@@ -762,7 +833,10 @@ class FunctionCallHandler:
             items = result.parameters.get("items", [])
             bin_id = result.parameters.get("bin_id")
             items_str = ", ".join(items)
-            return f"✅ Added {items_str} to bin {bin_id}"
+            if result.from_image_context:
+                return f"📸 Added items from uploaded image to bin {bin_id}: {items_str}"
+            else:
+                return f"✅ Added {items_str} to bin {bin_id}"
         
         elif result.function_name == "remove_items_from_bin":
             items = result.parameters.get("items", [])

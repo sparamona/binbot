@@ -353,41 +353,92 @@ This plan breaks down the BinBot implementation into small, testable phases. Eac
 
 ---
 
-## Phase 13: UI Enhancement & Final Polish
-**Goal**: Improve user interface and experience with wireframe updates
+## Phase 13: Main UI Structure & Wireframe Implementation
+**Goal**: Create the main SPA interface with proper structure and basic functionality (wireframe-level implementation)
 
 ### Tasks:
-1. **UI styling**
-   - Add Tailwind CSS
-   - Improve layout and design
-   - Add responsive design
+0. **Setup & Page Structure**
+   - Retain the existing test page (move to `/test` or `/admin`)
+   - Create new main page as default (`/` route) - this will be our primary SPA
+   - Set up basic routing structure for the SPA
 
-2. **UX improvements**
-   - Better loading states
-   - Improved feedback messages
-   - Keyboard shortcuts
+1. **Core UI Structure Implementation**
+   - Create main application layout (header, sidebar, main content area)
+   - Implement basic navigation structure
+   - Add core page components (dashboard, inventory, search, bins)
+   - Create basic forms and input components
 
-3. **Wireframe updates for image support**
-   - Update wireframes to include image capture buttons
-   - Add image display areas in bin contents
-   - Design image gallery and preview modals
-   - Include camera integration for mobile
+2. **Functional Wireframe Components**
+   - Implement bin management interface (create, list, edit bins)
+   - Create inventory item management (add, edit, delete items)
+   - Build search interface with results display
+   - Add image upload and display functionality
+   - Implement voice command interface
 
-4. **Final testing**
-   - End-to-end testing
-   - Performance testing
-   - User acceptance testing
+3. **Basic Data Flow & Integration**
+   - Connect all UI components to existing API endpoints
+   - Implement basic state management
+   - Add form validation and error handling
+   - Ensure all existing functionality works through new UI
+
+4. **Mobile-First Responsive Structure**
+   - Implement responsive layout structure
+   - Ensure touch-friendly interface elements
+   - Add basic mobile navigation patterns
+   - Test on mobile devices for functionality
 
 ### Testing:
-- UI is polished and responsive
-- All features work together seamlessly
-- Performance is acceptable
-- User experience is smooth
-- Wireframes include comprehensive image handling
+- All existing functionality accessible through new UI
+- Basic responsive layout works on mobile and desktop
+- Navigation and routing work correctly
+- Forms submit and display data properly
+- Image upload and display functional
+- Voice commands work through new interface
+
+## Phase 14: UX Enhancement & Polish
+**Goal**: Improve user experience with styling, animations, shortcuts, and advanced UX patterns
+
+### Tasks:
+1. **Visual Design & Styling**
+   - Add Tailwind CSS or similar styling framework
+   - Implement consistent design system (colors, typography, spacing)
+   - Add proper visual hierarchy and layout improvements
+   - Create attractive and professional appearance
+
+2. **Advanced UX Improvements**
+   - Add loading states and progress indicators
+   - Implement smooth transitions and animations
+   - Add keyboard shortcuts and accessibility features
+   - Improve feedback messages and notifications
+
+3. **Enhanced Interactions**
+   - Add drag-and-drop functionality for items/bins
+   - Implement advanced search filters and sorting
+   - Add bulk operations and batch actions
+   - Create contextual menus and quick actions
+
+4. **Performance & Polish**
+   - Optimize loading times and perceived performance
+   - Add caching and smart data fetching
+   - Implement offline capabilities where appropriate
+   - Add advanced error recovery and retry mechanisms
+
+5. **Final Testing & Optimization**
+   - End-to-end testing of complete user workflows
+   - Performance testing and optimization
+   - User acceptance testing and feedback incorporation
+   - Cross-browser and device compatibility testing
+
+### Testing:
+- UI is polished, attractive, and professional
+- All interactions feel smooth and responsive
+- Performance meets user expectations
+- Accessibility standards are met
+- User workflows are intuitive and efficient
 
 ---
 
-## Phase 14: Undo Functionality
+## Phase 15: Undo Functionality
 **Goal**: Users can undo recent operations
 
 ### Tasks:
@@ -409,7 +460,7 @@ This plan breaks down the BinBot implementation into small, testable phases. Eac
 
 ---
 
-## Phase 15: Advanced Features & Polish
+## Phase 16: Advanced Features & Polish
 **Goal**: Complete remaining advanced features and optimization
 
 ### Tasks:

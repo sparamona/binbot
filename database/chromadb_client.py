@@ -1,10 +1,14 @@
 import os
 import uuid
+import logging
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 import chromadb
 from chromadb.config import Settings
 from config.embeddings import DEFAULT_EMBEDDING_DIMENSION, get_model_info
+
+logger = logging.getLogger(__name__)
+
 
 
 class ChromaDBClient:
@@ -40,7 +44,7 @@ class ChromaDBClient:
             collection_name = db_config.get("collection_name", "inventory")
             try:
                 self.inventory_collection = self.client.get_collection(name=collection_name)
-                print(f"Found existing inventory collection: {collection_name}")
+                logger.debug(f"Found existing inventory collection: {collection_name}")
 
                 # Check if collection has correct embedding dimension
                 # Test with a dummy embedding to see if dimensions match
@@ -56,7 +60,7 @@ class ChromaDBClient:
                     self.inventory_collection.delete(ids=["test_dimension_check"])
                 except Exception as dim_error:
                     if "dimension" in str(dim_error).lower():
-                        print(f"Collection has wrong embedding dimension, recreating: {dim_error}")
+                        logger.debug(f"Collection has wrong embedding dimension, recreating: {dim_error}")
                         # Delete and recreate collection with correct dimensions
                         self.client.delete_collection(collection_name)
                         self.inventory_collection = self.client.create_collection(
@@ -67,7 +71,7 @@ class ChromaDBClient:
                                 "created_at": datetime.now().isoformat()
                             }
                         )
-                        print(f"Recreated inventory collection with correct dimensions: {collection_name}")
+                        logger.debug(f"Recreated inventory collection with correct dimensions: {collection_name}")
                     else:
                         raise dim_error
 
@@ -81,13 +85,13 @@ class ChromaDBClient:
                         "created_at": datetime.now().isoformat()
                     }
                 )
-                print(f"Created new inventory collection: {collection_name}")
+                logger.debug(f"Created new inventory collection: {collection_name}")
 
             # Get or create audit log collection
             audit_collection_name = "audit_log"
             try:
                 self.audit_log_collection = self.client.get_collection(name=audit_collection_name)
-                print(f"Found existing audit log collection: {audit_collection_name}")
+                logger.debug(f"Found existing audit log collection: {audit_collection_name}")
             except Exception:
                 # Collection doesn't exist, create it
                 self.audit_log_collection = self.client.create_collection(
@@ -97,13 +101,13 @@ class ChromaDBClient:
                         "created_at": datetime.now().isoformat()
                     }
                 )
-                print(f"Created new audit log collection: {audit_collection_name}")
+                logger.debug(f"Created new audit log collection: {audit_collection_name}")
 
-            print("ChromaDB initialized successfully")
+            logger.debug("ChromaDB initialized successfully")
             return True
 
         except Exception as e:
-            print(f"Failed to initialize ChromaDB: {e}")
+            logger.debug(f"Failed to initialize ChromaDB: {e}")
             return False
     
     def validate_connection(self) -> bool:
@@ -116,7 +120,7 @@ class ChromaDBClient:
             collections = self.client.list_collections()
             return len(collections) >= 0  # Should always be true if connection works
         except Exception as e:
-            print(f"Database connection validation error: {e}")
+            logger.debug(f"Database connection validation error: {e}")
             return False
     
     def get_collection_stats(self) -> Dict[str, Any]:
@@ -140,14 +144,14 @@ class ChromaDBClient:
             
             return stats
         except Exception as e:
-            print(f"Error getting collection stats: {e}")
+            logger.debug(f"Error getting collection stats: {e}")
             return {"error": str(e)}
     
     def add_document(self, name: str, bin_id: str, description: str, embedding: List[float]) -> str:
         """Add a document to the inventory collection and return the document ID"""
         try:
             if self.inventory_collection is None:
-                print("Inventory collection not initialized")
+                logger.debug("Inventory collection not initialized")
                 return None
 
             doc_id = str(uuid.uuid4())
@@ -176,11 +180,11 @@ class ChromaDBClient:
                 ids=[doc_id]
             )
 
-            print(f"Added document: {name} (ID: {doc_id})")
+            logger.debug(f"Added document: {name} (ID: {doc_id})")
             return doc_id
 
         except Exception as e:
-            print(f"Error adding document: {e}")
+            logger.debug(f"Error adding document: {e}")
             return None
 
     def add_documents_bulk(self, items: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -231,15 +235,28 @@ class ChromaDBClient:
                     "description": item['description']
                 })
 
-            # Atomic operation - add all documents at once
-            self.inventory_collection.add(
+            # Atomic operation - add all documents at once using upsert for better reliability
+            self.inventory_collection.upsert(
                 documents=documents,
                 metadatas=metadatas,
                 embeddings=embeddings,
                 ids=doc_ids
             )
 
-            print(f"Bulk added {len(doc_ids)} documents")
+            # Force a count operation to ensure data is committed/flushed
+            try:
+                count = self.inventory_collection.count()
+                logger.debug(f"Bulk added {len(doc_ids)} documents (collection now has {count} total items)")
+                logger.debug(f"Added document IDs: {doc_ids}")
+
+                # Verify the documents were actually added by trying to retrieve them
+                verification_result = self.inventory_collection.get(ids=doc_ids, include=['metadatas'])
+                logger.debug(f"Verification: Found {len(verification_result['ids'])} out of {len(doc_ids)} documents")
+                if len(verification_result['ids']) != len(doc_ids):
+                    logger.debug(f"Missing IDs: {set(doc_ids) - set(verification_result['ids'])}")
+
+            except Exception as e:
+                logger.debug(f"Bulk added {len(doc_ids)} documents (count check failed: {e})")
             return {
                 "success": True,
                 "added_items": added_items,
@@ -247,14 +264,14 @@ class ChromaDBClient:
             }
 
         except Exception as e:
-            print(f"Error in bulk add operation: {e}")
+            logger.debug(f"Error in bulk add operation: {e}")
             return {"success": False, "error": str(e)}
 
     def rollback_bulk_add(self, doc_ids: List[str]) -> bool:
         """Rollback a bulk add operation by removing the specified document IDs"""
         try:
             if self.inventory_collection is None:
-                print("Inventory collection not initialized")
+                logger.debug("Inventory collection not initialized")
                 return False
 
             if not doc_ids:
@@ -262,18 +279,18 @@ class ChromaDBClient:
 
             # Remove all documents that were added
             self.inventory_collection.delete(ids=doc_ids)
-            print(f"Rolled back {len(doc_ids)} documents")
+            logger.debug(f"Rolled back {len(doc_ids)} documents")
             return True
 
         except Exception as e:
-            print(f"Error rolling back bulk add: {e}")
+            logger.debug(f"Error rolling back bulk add: {e}")
             return False
 
     def add_audit_log_entry(self, audit_entry: Dict[str, Any]) -> bool:
         """Add an audit log entry"""
         try:
             if self.audit_log_collection is None:
-                print("Audit log collection not initialized")
+                logger.debug("Audit log collection not initialized")
                 return False
 
             doc_id = audit_entry.get("operation_id", str(uuid.uuid4()))
@@ -289,11 +306,11 @@ class ChromaDBClient:
                 ids=[doc_id]
             )
 
-            print(f"Added audit log entry: {audit_entry.get('action', 'unknown')}")
+            logger.debug(f"Added audit log entry: {audit_entry.get('action', 'unknown')}")
             return True
 
         except Exception as e:
-            print(f"Error adding audit log entry: {e}")
+            logger.debug(f"Error adding audit log entry: {e}")
             return False
     
     def search_documents(self, query: str, limit: int = 10, offset: int = 0, min_relevance: float = 0.6, embedding_service=None) -> Dict[str, Any]:
@@ -365,43 +382,43 @@ class ChromaDBClient:
                             }
 
                 except Exception as e:
-                    print(f"Semantic search failed: {e}")
+                    logger.debug(f"Semantic search failed: {e}")
                     raise e
             else:
                 raise Exception("Embedding service is required for search functionality")
 
         except Exception as e:
-            print(f"Error searching documents: {e}")
+            logger.debug(f"Error searching documents: {e}")
             raise e
 
     def remove_document(self, document_id: str) -> bool:
         """Remove a document from the inventory collection"""
         try:
             if self.inventory_collection is None:
-                print("Inventory collection not initialized")
+                logger.debug("Inventory collection not initialized")
                 return False
 
             # Remove the document by ID
             self.inventory_collection.delete(ids=[document_id])
-            print(f"Successfully removed document: {document_id}")
+            logger.debug(f"Successfully removed document: {document_id}")
             return True
 
         except Exception as e:
-            print(f"Error removing document {document_id}: {e}")
+            logger.debug(f"Error removing document {document_id}: {e}")
             return False
 
     def update_document_metadata(self, document_id: str, metadata_updates: dict) -> bool:
         """Update metadata for a specific document"""
         try:
             if self.inventory_collection is None:
-                print("Inventory collection not initialized")
+                logger.debug("Inventory collection not initialized")
                 return False
 
             # Get the current document with embeddings
             result = self.inventory_collection.get(ids=[document_id], include=["metadatas", "documents", "embeddings"])
 
             if not result["ids"] or len(result["ids"]) == 0:
-                print(f"Document {document_id} not found")
+                logger.debug(f"Document {document_id} not found")
                 return False
 
             # Get current metadata, document, and embedding
@@ -421,11 +438,11 @@ class ChromaDBClient:
                 embeddings=[current_embedding] if current_embedding else None
             )
 
-            print(f"Successfully updated metadata for document: {document_id}")
+            logger.debug(f"Successfully updated metadata for document: {document_id}")
             return True
 
         except Exception as e:
-            print(f"Error updating document metadata {document_id}: {e}")
+            logger.debug(f"Error updating document metadata {document_id}: {e}")
             return False
 
     def add_image_to_item(self, item_id: str, image_id: str, set_as_primary: bool = False) -> bool:
@@ -438,7 +455,7 @@ class ChromaDBClient:
             )
 
             if not result['ids'] or len(result['ids']) == 0:
-                print(f"Item {item_id} not found")
+                logger.debug(f"Item {item_id} not found")
                 return False
 
             current_metadata = result['metadatas'][0]
@@ -465,10 +482,12 @@ class ChromaDBClient:
                 'updated_at': datetime.now().isoformat()
             }
 
+            logger.debug(f"chromadb_client: Adding image {image_id} to item {item_id}")
+
             return self.update_document_metadata(item_id, updates)
 
         except Exception as e:
-            print(f"Error adding image {image_id} to item {item_id}: {e}")
+            logger.debug(f"Error adding image {image_id} to item {item_id}: {e}")
             return False
 
     def remove_image_from_item(self, item_id: str, image_id: str) -> bool:
@@ -481,7 +500,7 @@ class ChromaDBClient:
             )
 
             if not result['ids'] or len(result['ids']) == 0:
-                print(f"Item {item_id} not found")
+                logger.debug(f"Item {item_id} not found")
                 return False
 
             current_metadata = result['metadatas'][0]
@@ -512,7 +531,7 @@ class ChromaDBClient:
             return self.update_document_metadata(item_id, updates)
 
         except Exception as e:
-            print(f"Error removing image {image_id} from item {item_id}: {e}")
+            logger.debug(f"Error removing image {image_id} from item {item_id}: {e}")
             return False
 
     def get_items_with_images(self) -> List[Dict[str, Any]]:
@@ -547,5 +566,5 @@ class ChromaDBClient:
             return items_with_images
 
         except Exception as e:
-            print(f"Error getting items with images: {e}")
+            logger.debug(f"Error getting items with images: {e}")
             return []
