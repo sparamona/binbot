@@ -72,7 +72,7 @@ class FunctionCallHandler:
             elif function_name == "list_bin_contents":
                 return await self._handle_list_bin(parameters)
             elif function_name == "add_items_from_image":
-                return await self._handle_add_items_from_image(parameters)
+                return await self._handle_add_items_from_image(parameters, image_context)
             elif function_name == "analyze_image":
                 return await self._handle_analyze_image(parameters)
             elif function_name == "search_by_image":
@@ -581,8 +581,8 @@ class FunctionCallHandler:
                 parameters=parameters
             )
 
-    async def _handle_add_items_from_image(self, parameters: Dict[str, Any]) -> FunctionCallResult:
-        """Handle adding items from image analysis"""
+    async def _handle_add_items_from_image(self, parameters: Dict[str, Any], image_context: Optional[Dict] = None) -> FunctionCallResult:
+        """Handle adding items from image analysis using current image context"""
         try:
             bin_id = parameters.get("bin_id")
             image_description = parameters.get("image_description", "")
@@ -595,25 +595,46 @@ class FunctionCallHandler:
                     parameters=parameters
                 )
 
-            # This function is designed to work with the frontend image upload
-            # For now, return instructions for the user
-            return FunctionCallResult(
-                success=True,
-                data={
-                    "message": f"To add items from an image to bin {bin_id}, please use the image upload feature in the web interface. Upload your image and the system will automatically analyze it and add the identified items to the bin.",
-                    "bin_id": bin_id,
-                    "description": image_description,
-                    "instructions": [
-                        "1. Go to the image upload section",
-                        "2. Select your image file",
-                        f"3. Choose bin {bin_id} as the destination",
-                        "4. Enable auto-analysis",
-                        "5. Upload the image"
-                    ]
-                },
-                function_name="add_items_from_image",
-                parameters=parameters
-            )
+            # Use the image context passed as parameter
+            if not image_context or not image_context.get('identified_items'):
+                return FunctionCallResult(
+                    success=False,
+                    error="No image context available. Please upload an image first.",
+                    function_name="add_items_from_image",
+                    parameters=parameters
+                )
+
+            # Extract item names from the image context
+            identified_items = image_context.get('identified_items', [])
+            item_names = [item.get('name', '') for item in identified_items if item.get('name')]
+
+            if not item_names:
+                return FunctionCallResult(
+                    success=False,
+                    error="No items were identified in the image.",
+                    function_name="add_items_from_image",
+                    parameters=parameters
+                )
+
+            # Use the regular add_items function to add the identified items
+            add_parameters = {
+                "items": item_names,
+                "bin_id": bin_id
+            }
+
+            # Call the add_items function directly
+            result = await self._handle_add_items(add_parameters, image_context)
+
+            # Update the result to indicate it came from image analysis
+            if result.success:
+                result.function_name = "add_items_from_image"
+                result.from_image_context = True
+
+                # Update the message to be more descriptive
+                if result.data:
+                    result.data["message"] = f"Successfully added {len(item_names)} items from image analysis to bin {bin_id}: {', '.join(item_names)}"
+
+            return result
 
         except Exception as e:
             logger.error(f"Error in add_items_from_image function: {e}")

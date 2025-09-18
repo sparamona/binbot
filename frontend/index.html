@@ -321,32 +321,6 @@
             <div id="image-result" class="result"></div>
         </div>
 
-        <!-- Smart Image Upload Section -->
-        <div class="section">
-            <h2>🤖 Smart Image Upload</h2>
-            <p style="color: #666; font-size: 14px;">Upload an image to a bin and let AI automatically identify and add items</p>
-            <div class="form-group">
-                <label for="smart-bin-id">Bin ID:</label>
-                <input type="text" id="smart-bin-id" placeholder="e.g., 3, 5, 12">
-            </div>
-            <div class="form-group">
-                <label for="smart-image-file">
-                    Select Image:
-                    <input type="file" id="smart-image-file" accept="image/*" onchange="previewSmartImage()">
-                </label>
-            </div>
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" id="auto-analyze" checked> Auto-analyze and create items
-                </label>
-            </div>
-            <div id="smart-image-preview" class="image-preview" style="display: none;">
-                <img id="smart-preview-img" style="max-width: 300px; max-height: 200px; border-radius: 4px;">
-            </div>
-            <button class="btn btn-success" onclick="uploadImageToBin()">🚀 Upload & Analyze</button>
-            <div id="smart-image-result" class="result"></div>
-        </div>
-
 
 
         <!-- Remove Items Section -->
@@ -1975,93 +1949,7 @@
             }
         }
 
-        // Smart Image Upload Functions
-        function previewSmartImage() {
-            const fileInput = document.getElementById('smart-image-file');
-            const preview = document.getElementById('smart-image-preview');
-            const previewImg = document.getElementById('smart-preview-img');
 
-            if (fileInput.files && fileInput.files[0]) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    previewImg.src = e.target.result;
-                    preview.style.display = 'block';
-                };
-                reader.readAsDataURL(fileInput.files[0]);
-            } else {
-                preview.style.display = 'none';
-            }
-        }
-
-        async function uploadImageToBin() {
-            const binId = document.getElementById('smart-bin-id').value.trim();
-            const fileInput = document.getElementById('smart-image-file');
-            const autoAnalyze = document.getElementById('auto-analyze').checked;
-            const resultDiv = document.getElementById('smart-image-result');
-
-            if (!binId) {
-                resultDiv.innerHTML = '<div class="status-error">❌ Please enter a bin ID</div>';
-                return;
-            }
-
-            if (!fileInput.files || !fileInput.files[0]) {
-                resultDiv.innerHTML = '<div class="status-error">❌ Please select an image file</div>';
-                return;
-            }
-
-            try {
-                resultDiv.innerHTML = '<div class="status-loading">⏳ Uploading and analyzing image...</div>';
-
-                const formData = new FormData();
-                formData.append('file', fileInput.files[0]);
-                formData.append('bin_id', binId);
-                formData.append('auto_analyze', autoAnalyze);
-
-                const response = await fetch(`${API_BASE}/images/upload-to-bin`, {
-                    method: 'POST',
-                    body: formData
-                });
-
-                const data = await response.json();
-
-                if (data.success) {
-                    let resultHtml = `<div class="status-success">✅ Image uploaded successfully!</div>`;
-                    resultHtml += `<div><strong>Image ID:</strong> ${data.data.image_id}</div>`;
-                    resultHtml += `<div><strong>Bin:</strong> ${data.data.bin_id}</div>`;
-
-                    if (data.data.items_created && data.data.items_created.length > 0) {
-                        resultHtml += `<div class="status-success">🤖 AI Analysis Complete!</div>`;
-                        data.data.items_created.forEach(item => {
-                            resultHtml += `
-                                <div style="border: 1px solid #28a745; padding: 10px; margin: 5px 0; border-radius: 4px; background: #f8fff8;">
-                                    <div><strong>Created Item:</strong> ${item.name}</div>
-                                    <div><strong>Description:</strong> ${item.description}</div>
-                                    <div><strong>Category:</strong> ${item.category}</div>
-                                    <div><strong>Confidence:</strong> ${item.confidence}/10</div>
-                                    <div><strong>Item ID:</strong> <span onclick="copyToClipboard('${item.id}')" style="cursor: pointer; color: #007bff; text-decoration: underline;">${item.id}</span></div>
-                                </div>
-                            `;
-                        });
-                    } else if (autoAnalyze) {
-                        resultHtml += `<div class="status-warning">⚠️ Auto-analysis was enabled but no items were created</div>`;
-                        if (data.data.analysis_error) {
-                            resultHtml += `<div><strong>Analysis Error:</strong> ${data.data.analysis_error}</div>`;
-                        }
-                    }
-
-                    resultDiv.innerHTML = resultHtml;
-
-                    // Clear form
-                    document.getElementById('smart-bin-id').value = '';
-                    fileInput.value = '';
-                    document.getElementById('smart-image-preview').style.display = 'none';
-                } else {
-                    resultDiv.innerHTML = `<div class="status-error">❌ Upload failed</div><pre>${formatResponse(data)}</pre>`;
-                }
-            } catch (error) {
-                resultDiv.innerHTML = `<div class="status-error">❌ Connection Error</div><pre>Error: ${error.message}</pre>`;
-            }
-        }
 
         // Image Upload Integration with NLP
 

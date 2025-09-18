@@ -514,6 +514,15 @@
                         font-size: 1rem;
                         cursor: pointer;
                     ">📷 Capture</button>
+                    <button id="upload-btn" style="
+                        padding: 1rem 2rem;
+                        background: #10b981;
+                        color: white;
+                        border: none;
+                        border-radius: 0.5rem;
+                        font-size: 1rem;
+                        cursor: pointer;
+                    ">📁 Upload Photo</button>
                     <button id="cancel-camera-btn" style="
                         padding: 1rem 2rem;
                         background: #6b7280;
@@ -524,20 +533,7 @@
                         cursor: pointer;
                     ">❌ Cancel</button>
                 </div>
-                <div style="margin-top: 0.5rem;">
-                    <label style="color: white; font-size: 0.875rem;">
-                        <input type="checkbox" id="specify-bin-checkbox" style="margin-right: 0.5rem;">
-                        Specify bin for smart analysis
-                    </label>
-                </div>
-                <div id="bin-input-container" style="display: none; margin-top: 0.5rem;">
-                    <input type="text" id="photo-bin-input" placeholder="Enter bin ID (e.g., 3, A1)" style="
-                        padding: 0.5rem;
-                        border: 1px solid #d1d5db;
-                        border-radius: 0.25rem;
-                        font-size: 0.875rem;
-                    ">
-                </div>
+                <input type="file" id="photo-upload-input" accept="image/*" style="display: none;">
             `;
 
             document.body.appendChild(modal);
@@ -546,16 +542,23 @@
             const video = document.getElementById('camera-video');
             video.srcObject = stream;
 
-            // Handle bin input toggle
-            const specifyBinCheckbox = document.getElementById('specify-bin-checkbox');
-            const binInputContainer = document.getElementById('bin-input-container');
-            specifyBinCheckbox.addEventListener('change', function() {
-                binInputContainer.style.display = this.checked ? 'block' : 'none';
-            });
-
             // Handle capture
             document.getElementById('capture-btn').addEventListener('click', function() {
                 capturePhoto(stream);
+            });
+
+            // Handle upload
+            document.getElementById('upload-btn').addEventListener('click', function() {
+                document.getElementById('photo-upload-input').click();
+            });
+
+            // Handle file selection
+            document.getElementById('photo-upload-input').addEventListener('change', function(e) {
+                if (e.target.files && e.target.files[0]) {
+                    const file = e.target.files[0];
+                    closeCameraModal(stream);
+                    uploadSelectedPhoto(file);
+                }
             });
 
             // Handle cancel
@@ -587,10 +590,6 @@
                 // Convert to blob
                 canvas.toBlob(async function(blob) {
                     try {
-                        // Get bin ID if specified
-                        const specifyBin = document.getElementById('specify-bin-checkbox').checked;
-                        const binId = specifyBin ? document.getElementById('photo-bin-input').value.trim() : '';
-
                         // Close camera modal
                         closeCameraModal(stream);
 
@@ -598,7 +597,7 @@
                         addChatMessage('📷 Photo captured! Analyzing image...', false);
 
                         // Upload and analyze image
-                        await uploadAndAnalyzeImage(blob, binId);
+                        await uploadAndAnalyzeImage(blob);
 
                     } catch (error) {
                         console.error('Error processing photo:', error);
@@ -625,87 +624,59 @@
             }
         }
 
-        async function uploadAndAnalyzeImage(imageBlob, binId = '') {
+        async function uploadAndAnalyzeImage(imageBlob) {
             try {
-                // Create form data using the same format as the working test page
+                // Use NLP endpoint for image analysis
                 const formData = new FormData();
-                formData.append('file', imageBlob, 'camera-photo.jpg');  // Use 'file' not 'image'
+                formData.append('command', 'What items can you see in this image?');
+                formData.append('session_id', chatSessionId);
+                formData.append('image', imageBlob, 'camera-photo.jpg');
 
-                if (binId) {
-                    formData.append('bin_id', binId);
-                    formData.append('auto_analyze', 'true');  // Enable auto-analysis
+                const response = await fetch(`${API_BASE}/nlp/command-with-image`, {
+                    method: 'POST',
+                    body: formData
+                });
 
-                    // Use the upload-to-bin endpoint that works in the test page
-                    const response = await fetch(`${API_BASE}/images/upload-to-bin`, {
-                        method: 'POST',
-                        body: formData
-                    });
-
-                    if (!response.ok) {
-                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                    }
-
-                    const data = await response.json();
-
-                    if (data.success) {
-                        const result = data.data;
-
-                        // Show analysis results
-                        if (result.items_added && result.items_added.length > 0) {
-                            const itemNames = result.items_added.map(item => item.name).join(', ');
-                            addChatMessage(`✅ Image analyzed! Added ${result.items_added.length} item(s) to bin ${binId}: ${itemNames}`, false);
-
-                            // Update current bin display
-                            await updateCurrentBin(binId);
-                        } else if (result.analysis) {
-                            addChatMessage(`📷 Image uploaded to bin ${binId}. Analysis: ${result.analysis}`, false);
-                            await updateCurrentBin(binId);
-                        } else {
-                            addChatMessage(`📷 Image uploaded to bin ${binId}, but no items were automatically identified. You can add items manually using chat commands.`, false);
-                            await updateCurrentBin(binId);
-                        }
-
-                        // Show image ID for reference
-                        if (result.image_id) {
-                            console.log('Image uploaded with ID:', result.image_id);
-                        }
-
-                    } else {
-                        throw new Error(data.error?.message || 'Image analysis failed');
-                    }
-
-                } else {
-                    // No bin specified - use the single-call NLP endpoint to analyze with a default command
-                    const fd = new FormData();
-                    fd.append('command', 'analyze this image and tell me what you see');
-                    fd.append('session_id', chatSessionId);
-                    fd.append('image', imageBlob, 'camera-photo.jpg');
-
-                    const response = await fetch(`${API_BASE}/nlp/command-with-image`, {
-                        method: 'POST',
-                        body: fd
-                    });
-
-                    if (!response.ok) {
-                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                    }
-
-                    const data = await response.json();
-
-                    if (data.success) {
-                        const msg = data.data?.response || data.data?.message || 'Image analyzed.';
-                        addChatMessage(`📷 ${msg}`, false);
-                        if (data.data?.image_id) {
-                            console.log('Image uploaded with ID:', data.data.image_id);
-                        }
-                    } else {
-                        throw new Error(data.error?.message || 'Image analysis failed');
-                    }
-
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
+
+                const data = await response.json();
+
+                if (data.success) {
+                    const message = data.data?.response || data.data?.message || 'Image analyzed successfully';
+                    addChatMessage(`✅ ${message}`, false);
+
+                    // Show identified items if available
+                    const identifiedItems = data.data?.identified_items || [];
+                    if (identifiedItems.length > 0) {
+                        addChatMessage(`🔍 I can see ${identifiedItems.length} item(s):`, false);
+                        identifiedItems.forEach((item, index) => {
+                            const confidence = item.confidence ? ` (${item.confidence}/10 confidence)` : '';
+                            addChatMessage(`${index + 1}. ${item.name}${confidence}`, false);
+                        });
+                    }
+                } else {
+                    throw new Error(data.error?.message || 'Analysis failed');
+                }
+
             } catch (error) {
-                console.error('Error uploading image:', error);
-                addChatMessage(`❌ Error analyzing image: ${error.message}`, false);
+                console.error('Upload error:', error);
+                addChatMessage(`❌ Error uploading image: ${error.message}`, false);
+            }
+        }
+
+        async function uploadSelectedPhoto(file) {
+            try {
+                // Show processing message
+                addChatMessage('📁 Photo selected! Analyzing image...', false);
+
+                // Upload and analyze the selected file
+                await uploadAndAnalyzeImage(file);
+
+            } catch (error) {
+                console.error('Error processing selected photo:', error);
+                addChatMessage(`❌ Error processing photo: ${error.message}`, false);
             }
         }
 
