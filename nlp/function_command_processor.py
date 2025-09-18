@@ -44,7 +44,7 @@ class FunctionCommandProcessor:
         # Get function definitions for OpenAI
         self.functions = get_inventory_functions()
 
-    async def process_command(self, command_text: str, session_id: Optional[str] = None, image_context: Optional[dict] = None) -> CommandResult:
+    async def process_command(self, command_text: str, session_id: Optional[str] = None) -> CommandResult:
         """Process a natural language command using function calling"""
 
         # Generate session ID if not provided
@@ -57,33 +57,14 @@ class FunctionCommandProcessor:
         logger.info(f"Processing command: '{command_text}' for session {session_id}")
 
         try:
-            # Add image context to the conversation if provided
-            if image_context:
-                if image_context.get('identified_items'):
-                    context_message = f"Image context: I can see the following items in the uploaded image: "
-                    item_descriptions = []
-                    for item in image_context['identified_items']:
-                        item_descriptions.append(f"{item['name']} ({item.get('description', 'no description')})")
-                    context_message += ", ".join(item_descriptions)
-                elif image_context.get('analysis'):
-                    context_message = f"IMPORTANT: The user has uploaded an image and I have already analyzed it. Analysis result: {image_context['analysis']} When the user asks about the image content (like 'what's in the image?'), respond directly with this analysis. Do NOT call analyze_image or other functions - just use this provided analysis."
-                else:
-                    context_message = f"Image context: The user has uploaded an image (ID: {image_context.get('image_id', 'unknown')}) and is asking about it."
-
-                # Add context as a system message
-                conversation_manager.add_message(session_id, "system", context_message)
-
             # Add user message to conversation
             conversation_manager.add_message(session_id, "user", command_text)
 
             # Get conversation history for context
             messages = conversation_manager.get_messages(session_id)
 
-            # Choose tool set; if image context exists, hide direct image-analysis tools
+            # Use all available functions - let LLM decide what to call
             functions_to_use = self.functions
-            if image_context:
-                blocked = {"analyze_image", "search_by_image", "describe_image"}
-                functions_to_use = [f for f in self.functions if f.get("function", {}).get("name") not in blocked]
 
             # Call LLM with function calling enabled
             response = await self.llm_client.chat_completion(
@@ -95,14 +76,7 @@ class FunctionCommandProcessor:
             )
 
             # Process the response
-            result = await self._process_llm_response(response, session_id, command_text, image_context)
-
-            # If items were added and we have image context, associate the image
-            if (result.success and hasattr(result, 'items_added') and result.items_added and
-                image_context and image_context.get('image_id')):
-                # TODO: Associate image with created items
-                # This would require updating the database to link the temporary image to the items
-                pass
+            result = await self._process_llm_response(response, session_id, command_text)
 
             return result
 
@@ -114,7 +88,7 @@ class FunctionCommandProcessor:
                 error=str(e)
             )
 
-    async def _process_llm_response(self, response, session_id: str, original_command: str, image_context: Optional[Dict] = None) -> CommandResult:
+    async def _process_llm_response(self, response, session_id: str, original_command: str) -> CommandResult:
         """Process the LLM response and handle function calls"""
         
         try:
@@ -123,7 +97,7 @@ class FunctionCommandProcessor:
             
             # Check if the LLM wants to call functions
             if hasattr(message, 'tool_calls') and message.tool_calls:
-                return await self._handle_function_calls(message, session_id, original_command, image_context)
+                return await self._handle_function_calls(message, session_id, original_command)
             
             # If no function calls, this is a regular text response
             elif hasattr(message, 'content') and message.content:
@@ -152,7 +126,7 @@ class FunctionCommandProcessor:
                 error=str(e)
             )
 
-    async def _handle_function_calls(self, message, session_id: str, original_command: str, image_context: Optional[Dict] = None) -> CommandResult:
+    async def _handle_function_calls(self, message, session_id: str, original_command: str) -> CommandResult:
         """Handle function calls from the LLM"""
         
         function_results = []
@@ -172,7 +146,7 @@ class FunctionCommandProcessor:
                         
                         # Execute the function
                         result = await self.function_handler.execute_function_call(
-                            function_name, function_args, image_context
+                            function_name, function_args, session_id
                         )
                         
                         function_results.append({

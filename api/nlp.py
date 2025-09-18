@@ -13,10 +13,14 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 from typing import Optional
 import uuid
+import logging
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 from api_schemas import StandardResponse, ErrorDetail
 from nlp.function_command_processor import FunctionCommandProcessor
+from session.session_manager import session_manager
 
 # Global dependencies (will be set by main app)
 db_client = None
@@ -77,23 +81,38 @@ async def process_natural_language_command(request: NLPCommandRequest):
             image_storage=image_storage
         )
         
-        # Process the command
+        # Process the command (processor will check session for image context if needed)
         result = await processor.process_command(
             command_text=request.command,
             session_id=request.session_id
         )
-        
+
+        # Check if result is None
+        if result is None:
+            error_detail = ErrorDetail(
+                code="PROCESSING_FAILED",
+                message="Failed to process command",
+                details={
+                    "command": request.command,
+                    "error": "Command processor returned None"
+                }
+            )
+            return StandardResponse(success=False, error=error_detail)
+
+        # Note: Image context is now managed naturally through conversation history
+        # The LLM decides when to use image_id based on conversational context
+
         # Format response
         response_data = {
-            "message": result.message,
+            "message": getattr(result, 'message', 'No message available'),
             "command_processed": request.command,
             "timestamp": datetime.now().isoformat()
         }
-        
-        if result.data:
+
+        if hasattr(result, 'data') and result.data:
             response_data.update(result.data)
-        
-        if result.success:
+
+        if getattr(result, 'success', False):
             return StandardResponse(
                 success=True,
                 data=response_data
@@ -101,10 +120,10 @@ async def process_natural_language_command(request: NLPCommandRequest):
         else:
             error_detail = ErrorDetail(
                 code="COMMAND_FAILED",
-                message=result.message,
+                message=getattr(result, 'message', 'Command failed'),
                 details={
                     "command": request.command,
-                    "error": result.error,
+                    "error": getattr(result, 'error', 'Unknown error'),
                     "suggestions": getattr(result, 'suggestions', None)
                 }
             )
@@ -121,14 +140,14 @@ async def process_natural_language_command(request: NLPCommandRequest):
 
 
 
-@router.post("/command-with-image", response_model=StandardResponse)
-async def process_command_with_image(
+@router.post("/upload-image", response_model=StandardResponse)
+async def upload_image_and_process(
     command: str = Form(...),
     session_id: Optional[str] = Form(None),
     image: Optional[UploadFile] = File(None)
 ):
     """
-    Process a natural language command with an optional image in a single call.
+    Upload an image and process a natural language command in a single call.
 
     - If an image is provided, it is analyzed inline and a concise text description
       is added to the conversation context before processing the command.
@@ -140,8 +159,7 @@ async def process_command_with_image(
         if not db_client or not embedding_service or not llm_client:
             raise HTTPException(status_code=500, detail="Service dependencies not initialized")
 
-        # Build image context if an image is provided
-        image_context = None
+        # Process image if provided and add to conversation
         if image is not None:
             if not image.content_type or not image.content_type.startswith('image/'):
                 error_detail = ErrorDetail(
@@ -185,37 +203,49 @@ async def process_command_with_image(
                     return StandardResponse(success=False, error=error_detail)
 
                 image_path = image_storage.get_image_path(actual_image_id, "full")
+                logger.info(f"DEBUG: Got image path: {image_path}")
 
                 # Analyze the image once and create conversational analysis text
+                logger.info(f"DEBUG: About to call vision_service.identify_item")
                 analysis_result = vision_service.identify_item(image_path, "conversation")
+                logger.info(f"DEBUG: Vision service call completed")
+                logger.info(f"DEBUG: Vision analysis result: {analysis_result}")
 
                 identified_items = []
                 if analysis_result and analysis_result.get("success") and analysis_result.get("items"):
+                    logger.info(f"DEBUG: Vision analysis successful, found {len(analysis_result['items'])} items")
                     for item in analysis_result["items"]:
                         identified_items.append({
                             "name": item.get('item_name', 'Unknown item'),
                             "description": item.get('description', ''),
                             "confidence": item.get('confidence', 0.0)
                         })
-
-                # Friendly analysis text
-                if identified_items:
-                    item_names = [item['name'] for item in identified_items]
-                    if len(item_names) == 1:
-                        analysis_text = f"🔍 I can see a {item_names[0]} in this image."
-                    elif len(item_names) == 2:
-                        analysis_text = f"🔍 I can see a {item_names[0]} and a {item_names[1]} in this image."
-                    else:
-                        items_list = ", ".join(item_names[:-1]) + f", and a {item_names[-1]}"
-                        analysis_text = f"🔍 I can see a {items_list} in this image."
                 else:
-                    analysis_text = "🔍 I can see this image, but I'm having trouble identifying specific items."
+                    logger.info(f"DEBUG: Vision analysis failed or no items found. analysis_result: {analysis_result}")
 
-                image_context = {
-                    "image_id": actual_image_id,
-                    "analysis": analysis_text,
-                    "identified_items": identified_items
-                }
+                logger.info(f"DEBUG: Final identified_items: {identified_items}")
+
+                # Add image analysis directly to conversation
+                logger.info(f"DEBUG: About to add image analysis to conversation. session_id={session_id}, identified_items={identified_items}")
+                if session_id:
+                    from nlp.conversation_manager import conversation_manager
+
+                    if identified_items:
+                        # Create a natural system message about the image
+                        item_names = [item['name'] for item in identified_items]
+                        context_message = f"I can see the following items in the uploaded image: {', '.join(item_names)}. The image ID is {actual_image_id}."
+                        logger.info(f"DEBUG: Adding system message to conversation: {context_message}")
+                    else:
+                        context_message = f"I can see an uploaded image (ID: {actual_image_id}) but I'm having trouble identifying specific items."
+                        logger.info(f"DEBUG: Adding system message to conversation (no items): {context_message}")
+
+                    # Add to conversation naturally
+                    conversation_manager.add_message(session_id, "system", context_message)
+                    logger.info(f"DEBUG: System message added to conversation for session {session_id}")
+                else:
+                    logger.info(f"DEBUG: No session_id provided, skipping conversation addition")
+
+
             except Exception as e:
                 error_detail = ErrorDetail(
                     code="ANALYSIS_ERROR",
@@ -232,36 +262,44 @@ async def process_command_with_image(
             image_storage=image_storage
         )
 
-        # Process command immediately with optional image context
+        # Process command (processor will access image context from session)
         result = await processor.process_command(
             command_text=command,
-            session_id=session_id,
-            image_context=image_context
+            session_id=session_id
         )
+
+        # Check if result is None
+        if result is None:
+            error_detail = ErrorDetail(
+                code="PROCESSING_FAILED",
+                message="Failed to process command with image",
+                details={
+                    "command": command,
+                    "error": "Command processor returned None"
+                }
+            )
+            return StandardResponse(success=False, error=error_detail)
 
         # Format response
         response_data = {
-            "response": result.message,
-            "message": result.message,  # keep both keys for UI compatibility
+            "response": getattr(result, 'message', 'No message available'),
+            "message": getattr(result, 'message', 'No message available'),  # keep both keys for UI compatibility
             "command_processed": command,
             "timestamp": datetime.now().isoformat()
         }
-        if image_context:
-            response_data.update({
-                "image_id": image_context.get("image_id"),
-                "identified_items": image_context.get("identified_items", []),
-                "analysis": image_context.get("analysis")
-            })
-        if result.data:
+        if hasattr(result, 'data') and result.data:
             response_data.update(result.data)
 
-        if result.success:
+        if getattr(result, 'success', False):
             return StandardResponse(success=True, data=response_data)
         else:
             error_detail = ErrorDetail(
                 code="COMMAND_FAILED",
-                message=result.message,
-                details={"command": command, "error": result.error}
+                message=getattr(result, 'message', 'Command failed'),
+                details={
+                    "command": command,
+                    "error": getattr(result, 'error', 'Unknown error')
+                }
             )
             return StandardResponse(success=False, error=error_detail)
 
@@ -392,9 +430,10 @@ async def test_command_parsing(request: NLPCommandRequest):
             raise HTTPException(status_code=500, detail="Service dependencies not initialized")
         
         # Initialize command processor
-        processor = CommandProcessor(
+        processor = FunctionCommandProcessor(
             db_client=db_client,
             embedding_service=embedding_service,
+            llm_client=llm_client,
             session_manager=session_manager
         )
         

@@ -33,6 +33,11 @@ def get_inventory_functions() -> List[Dict[str, Any]]:
                             "type": "string",
                             "description": "The ID/number of the bin to add items to (e.g., '3', '5', '12')",
                             "pattern": "^[0-9]+$"
+                        },
+                        "image_id": {
+                            "type": "string",
+                            "description": "Optional image ID to associate with the items. Include this ONLY when the user is referring to items that were identified from a recently uploaded image (e.g., 'add these items', 'add the items from the image'). Do NOT include for new items mentioned by the user (e.g., 'add a pencil').",
+                            "minLength": 1
                         }
                     },
                     "required": ["items", "bin_id"],
@@ -154,29 +159,6 @@ def get_inventory_functions() -> List[Dict[str, Any]]:
                         }
                     },
                     "required": ["bin_id"],
-                    "additionalProperties": False
-                }
-            }
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "add_items_from_image",
-                "description": "Upload an image to a bin and automatically identify and add items from the image",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "bin_id": {
-                            "type": "string",
-                            "description": "The ID/number of the bin to add items to (e.g., '3', '5', '12')",
-                            "pattern": "^[0-9]+$"
-                        },
-                        "image_description": {
-                            "type": "string",
-                            "description": "Description of what the user wants to add from the image (e.g., 'the screws in this image', 'these tools')"
-                        }
-                    },
-                    "required": ["bin_id", "image_description"],
                     "additionalProperties": False
                 }
             }

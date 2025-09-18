@@ -36,14 +36,14 @@ class FunctionCallHandler:
         self.image_storage = image_storage
         self.supported_functions = set(get_all_function_names())
     
-    async def execute_function_call(self, function_name: str, parameters: Dict[str, Any], image_context: Optional[Dict] = None) -> FunctionCallResult:
+    async def execute_function_call(self, function_name: str, parameters: Dict[str, Any], session_id: Optional[str] = None) -> FunctionCallResult:
         """
         Execute a function call with the given parameters.
 
         Args:
             function_name: Name of the function to execute
             parameters: Parameters for the function call
-            image_context: Optional image context for associating images with created items
+            session_id: Optional session ID for accessing conversation context
 
         Returns:
             FunctionCallResult with the execution result
@@ -60,7 +60,7 @@ class FunctionCallHandler:
         
         try:
             if function_name == "add_items_to_bin":
-                return await self._handle_add_items(parameters, image_context)
+                return await self._handle_add_items(parameters, session_id)
             elif function_name == "remove_items_from_bin":
                 return await self._handle_remove_items(parameters)
             elif function_name == "move_items_between_bins":
@@ -72,7 +72,7 @@ class FunctionCallHandler:
             elif function_name == "list_bin_contents":
                 return await self._handle_list_bin(parameters)
             elif function_name == "add_items_from_image":
-                return await self._handle_add_items_from_image(parameters, image_context)
+                return await self._handle_add_items_from_image(parameters, session_id)
             elif function_name == "analyze_image":
                 return await self._handle_analyze_image(parameters)
             elif function_name == "search_by_image":
@@ -96,7 +96,7 @@ class FunctionCallHandler:
                 parameters=parameters
             )
     
-    async def _handle_add_items(self, parameters: Dict[str, Any], image_context: Optional[Dict] = None) -> FunctionCallResult:
+    async def _handle_add_items(self, parameters: Dict[str, Any], session_id: Optional[str] = None) -> FunctionCallResult:
         """Handle add_items_to_bin function call"""
         items = parameters.get("items", [])
         bin_id = parameters.get("bin_id")
@@ -158,9 +158,11 @@ class FunctionCallHandler:
                         for item in added_items:
                             logger.info(f"Added item '{item['name']}' to bin {bin_id}")
 
-                        # Associate image with created items if image context is provided
-                        if image_context and image_context.get('image_id') and self.image_storage:
-                            await self._associate_image_with_items(image_context['image_id'], added_items, bin_id)
+                        # Associate image with created items if image_id parameter is provided
+                        image_id_to_use = parameters.get('image_id')
+
+                        if image_id_to_use and self.image_storage:
+                            await self._associate_image_with_items(image_id_to_use, added_items, bin_id)
                     else:
                         # If bulk add failed, add individual error for each item
                         error_msg = bulk_result.get("error", "Unknown bulk add error")
@@ -205,7 +207,7 @@ class FunctionCallHandler:
                 data=result_data,
                 function_name="add_items_to_bin",
                 parameters=parameters,
-                from_image_context=bool(image_context and image_context.get('image_id'))
+                from_image_context=bool(parameters.get('image_id'))
             )
 
         except Exception as e:
@@ -215,7 +217,7 @@ class FunctionCallHandler:
                 error=f"Error adding items: {str(e)}",
                 function_name="add_items_to_bin",
                 parameters=parameters,
-                from_image_context=bool(image_context and image_context.get('image_id'))
+                from_image_context=bool(parameters.get('image_id'))
             )
 
     async def _associate_image_with_items(self, image_id: str, added_items: List[Dict], bin_id: str):
@@ -581,69 +583,16 @@ class FunctionCallHandler:
                 parameters=parameters
             )
 
-    async def _handle_add_items_from_image(self, parameters: Dict[str, Any], image_context: Optional[Dict] = None) -> FunctionCallResult:
+    async def _handle_add_items_from_image(self, parameters: Dict[str, Any], session_id: Optional[str] = None) -> FunctionCallResult:
         """Handle adding items from image analysis using current image context"""
-        try:
-            bin_id = parameters.get("bin_id")
-            image_description = parameters.get("image_description", "")
-
-            if not bin_id:
-                return FunctionCallResult(
-                    success=False,
-                    error="Bin ID is required",
-                    function_name="add_items_from_image",
-                    parameters=parameters
-                )
-
-            # Use the image context passed as parameter
-            if not image_context or not image_context.get('identified_items'):
-                return FunctionCallResult(
-                    success=False,
-                    error="No image context available. Please upload an image first.",
-                    function_name="add_items_from_image",
-                    parameters=parameters
-                )
-
-            # Extract item names from the image context
-            identified_items = image_context.get('identified_items', [])
-            item_names = [item.get('name', '') for item in identified_items if item.get('name')]
-
-            if not item_names:
-                return FunctionCallResult(
-                    success=False,
-                    error="No items were identified in the image.",
-                    function_name="add_items_from_image",
-                    parameters=parameters
-                )
-
-            # Use the regular add_items function to add the identified items
-            add_parameters = {
-                "items": item_names,
-                "bin_id": bin_id
-            }
-
-            # Call the add_items function directly
-            result = await self._handle_add_items(add_parameters, image_context)
-
-            # Update the result to indicate it came from image analysis
-            if result.success:
-                result.function_name = "add_items_from_image"
-                result.from_image_context = True
-
-                # Update the message to be more descriptive
-                if result.data:
-                    result.data["message"] = f"Successfully added {len(item_names)} items from image analysis to bin {bin_id}: {', '.join(item_names)}"
-
-            return result
-
-        except Exception as e:
-            logger.error(f"Error in add_items_from_image function: {e}")
-            return FunctionCallResult(
-                success=False,
-                error=f"Error processing image request: {str(e)}",
-                function_name="add_items_from_image",
-                parameters=parameters
-            )
+        # This function is deprecated - image context now flows through conversation
+        # The LLM should use add_items_to_bin directly with image_id when appropriate
+        return FunctionCallResult(
+            success=False,
+            error="This function is deprecated. Use add_items_to_bin with image_id parameter instead.",
+            function_name="add_items_from_image",
+            parameters=parameters
+        )
 
     async def _handle_analyze_image(self, parameters: Dict[str, Any]) -> FunctionCallResult:
         """Handle image analysis using Vision API"""

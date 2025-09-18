@@ -108,7 +108,7 @@ class ConversationHistory:
 - Break down complex operations into multiple function calls when needed
 
 🔧 AVAILABLE FUNCTIONS:
-- add_items_to_bin: Add items to a specific bin
+- add_items_to_bin: Add items to a specific bin (supports optional image_id parameter)
 - remove_items_from_bin: Remove items from a specific bin
 - move_items_between_bins: Move items from one bin to another
 - search_for_items: Search for items in the inventory
@@ -163,6 +163,9 @@ ALWAYS use multiple function calls for operations that require:
 - Moving "all items" or "everything" (list first, then move)
 - Removing items by category (list first, filter by category, then remove)
 
+📸 IMAGE HANDLING:
+When you see system messages about uploaded images with identified items and image IDs, use your natural language understanding to determine when the user is referring to items from the uploaded image versus new items they're mentioning. Include the image_id parameter in add_items_to_bin calls only when the user is clearly referring to items from a recently uploaded image.
+
 ⚠️ CRITICAL GUIDELINES:
 - ALWAYS call functions when you have enough information - don't just provide conversational responses
 - Use conversation context to complete commands across multiple messages
@@ -172,7 +175,8 @@ ALWAYS use multiple function calls for operations that require:
 - Parse item lists naturally (handle "and", commas, multiple items)
 - Extract bin numbers from various formats ("bin 3", "bin number 5", "the 3rd bin", or just "3")
 - If information is missing, ask for clarification BUT then execute when provided
-- For complex operations, ALWAYS break them down into multiple function calls in the same response"""
+- For complex operations, ALWAYS break them down into multiple function calls in the same response
+"""
 
     def clear(self) -> None:
         """Clear all messages from the conversation"""

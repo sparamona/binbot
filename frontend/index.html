@@ -472,7 +472,7 @@
                     // Clear after sending
                     pendingImage = null;
 
-                    const response = await fetch('/nlp/command-with-image', {
+                    const response = await fetch('/nlp/upload-image', {
                         method: 'POST',
                         body: formData
                     });

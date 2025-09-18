@@ -228,6 +228,17 @@
             border-radius: 0.5rem;
             border: 1px solid #e2e8f0;
             margin-bottom: 0.5rem;
+            display: flex;
+            gap: 0.75rem;
+            align-items: stretch;
+            min-height: 80px;
+        }
+
+        .bin-item-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
         }
 
         .bin-item-name {
@@ -238,6 +249,78 @@
         .bin-item-description {
             font-size: 0.875rem;
             color: #64748b;
+        }
+
+        .bin-item-thumbnail {
+            width: auto;
+            height: 100%;
+            max-width: 120px;
+            border-radius: 0.375rem;
+            object-fit: cover;
+            cursor: pointer;
+            border: 2px solid #e2e8f0;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+        }
+
+        .bin-item-thumbnail:hover {
+            border-color: #3b82f6;
+            transform: scale(1.02);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+        }
+
+        /* Image Modal Styles */
+        .image-modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(4px);
+        }
+
+        .image-modal-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            max-width: 90vw;
+            max-height: 90vh;
+            border-radius: 0.5rem;
+            overflow: hidden;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        }
+
+        .image-modal img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: block;
+        }
+
+        .image-modal-close {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            font-size: 1.5rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.2s ease;
+        }
+
+        .image-modal-close:hover {
+            background: rgba(0, 0, 0, 0.7);
         }
 
         .empty-state {
@@ -309,6 +392,14 @@
         </div>
     </div>
 
+    <!-- Image Modal -->
+    <div id="imageModal" class="image-modal">
+        <div class="image-modal-content">
+            <button class="image-modal-close" onclick="closeImageModal()">&times;</button>
+            <img id="modalImage" src="" alt="Item Image">
+        </div>
+    </div>
+
     <script>
         // Global state
         let currentBin = null;
@@ -319,6 +410,10 @@
         let speechSynthesis = window.speechSynthesis;
         let voiceProvider = 'browser'; // Will be loaded from config
         let voiceConfig = null;
+
+        // Image context storage for UI workflow
+        let pendingImageContext = null;
+        const IMAGE_CONTEXT_TIMEOUT = 5 * 60 * 1000; // 5 minutes
 
         // Audio cache for faster repeated responses
         const audioCache = new Map();
@@ -386,13 +481,54 @@
             input.value = '';
 
             try {
-                const data = await apiCall('/nlp/command', {
-                    method: 'POST',
-                    body: JSON.stringify({
-                        command: command,
-                        session_id: chatSessionId
-                    })
-                });
+                let data;
+
+                // Check if we have pending image context and this looks like an "add items" command
+                if (pendingImageContext &&
+                    (command.toLowerCase().includes('add') ||
+                     command.toLowerCase().includes('put') ||
+                     command.toLowerCase().includes('place') ||
+                     command.toLowerCase().includes('store')) &&
+                    (command.toLowerCase().includes('these') ||
+                     command.toLowerCase().includes('items') ||
+                     command.toLowerCase().includes('bin'))) {
+
+                    console.log('Using image context with command:', command);
+                    addChatMessage('🖼️ Using image from camera for this command...', false);
+
+                    // Use combined image + command API call
+                    const formData = new FormData();
+                    formData.append('command', command);
+                    formData.append('session_id', chatSessionId);
+                    formData.append('image', pendingImageContext.imageBlob, pendingImageContext.filename);
+
+                    const response = await fetch(`${API_BASE}/nlp/upload-image`, {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+
+                    data = await response.json();
+
+                    // Clear image context after successful use
+                    if (data.success) {
+                        pendingImageContext = null;
+                        console.log('Image context cleared after successful use');
+                    }
+
+                } else {
+                    // Use regular command API call
+                    data = await apiCall('/nlp/command', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            command: command,
+                            session_id: chatSessionId
+                        })
+                    });
+                }
 
                 if (data.success) {
                     const response = data.data?.response || data.data?.message || 'Command processed successfully';
@@ -626,13 +762,28 @@
 
         async function uploadAndAnalyzeImage(imageBlob) {
             try {
-                // Use NLP endpoint for image analysis
+                // Store image context for later use with chat commands
+                pendingImageContext = {
+                    imageBlob: imageBlob,
+                    timestamp: Date.now(),
+                    filename: 'camera-photo.jpg'
+                };
+
+                // Set timeout to clear image context
+                setTimeout(() => {
+                    if (pendingImageContext && Date.now() - pendingImageContext.timestamp >= IMAGE_CONTEXT_TIMEOUT) {
+                        pendingImageContext = null;
+                        console.log('Image context expired and cleared');
+                    }
+                }, IMAGE_CONTEXT_TIMEOUT);
+
+                // Quick analysis for user feedback (optional)
                 const formData = new FormData();
                 formData.append('command', 'What items can you see in this image?');
                 formData.append('session_id', chatSessionId);
                 formData.append('image', imageBlob, 'camera-photo.jpg');
 
-                const response = await fetch(`${API_BASE}/nlp/command-with-image`, {
+                const response = await fetch(`${API_BASE}/nlp/upload-image`, {
                     method: 'POST',
                     body: formData
                 });
@@ -646,6 +797,7 @@
                 if (data.success) {
                     const message = data.data?.response || data.data?.message || 'Image analyzed successfully';
                     addChatMessage(`✅ ${message}`, false);
+                    addChatMessage(`💡 Now you can type commands like "add these items to bin [bin-name]" to add the items with their image!`, false);
 
                     // Show identified items if available
                     const identifiedItems = data.data?.identified_items || [];
@@ -663,6 +815,8 @@
             } catch (error) {
                 console.error('Upload error:', error);
                 addChatMessage(`❌ Error uploading image: ${error.message}`, false);
+                // Clear image context on error
+                pendingImageContext = null;
             }
         }
 
@@ -700,16 +854,31 @@
                     if (binItems.length === 0) {
                         binContent.innerHTML = '<div class="empty-state">This bin is empty</div>';
                     } else {
-                        binContent.innerHTML = binItems.map(item => `
-                            <div class="bin-item">
-                                <div class="bin-item-name">${item.name}</div>
-                                <div class="bin-item-description">${item.description || 'No description'}</div>
-                                <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.25rem;">
-                                    Item ID: ${item.id}
-                                    ${item.images_count > 0 ? ` | 📷 ${item.images_count} image(s)` : ''}
+                        binContent.innerHTML = binItems.map(item => {
+                            const hasPrimaryImage = item.primary_image && item.primary_image.trim() !== '';
+                            const thumbnailHtml = hasPrimaryImage ?
+                                `<img class="bin-item-thumbnail"
+                                     src="/images/file/${item.primary_image}?size=medium"
+                                     alt="${item.name}"
+                                     onclick="showImageModal('${item.primary_image}', '${item.name}')"
+                                     onload="console.log('Image loaded:', '${item.primary_image}')"
+                                     onerror="console.error('Image failed to load:', '${item.primary_image}', this.src); this.style.display='none'"
+                                     title="Click to expand image">` : '';
+
+                            return `
+                                <div class="bin-item">
+                                    <div class="bin-item-content">
+                                        <div class="bin-item-name">${item.name}</div>
+                                        <div class="bin-item-description">${item.description || 'No description'}</div>
+                                        <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.25rem;">
+                                            Item ID: ${item.id}
+                                            ${item.images_count > 0 ? ` | 📷 ${item.images_count} image(s)` : ''}
+                                        </div>
+                                    </div>
+                                    ${thumbnailHtml}
                                 </div>
-                            </div>
-                        `).join('');
+                            `;
+                        }).join('');
                     }
                 } else {
                     throw new Error(data.error?.message || 'Failed to retrieve bin items');
@@ -719,6 +888,36 @@
                 binContent.innerHTML = `<div class="empty-state">Failed to load bin contents: ${error.message}</div>`;
             }
         }
+
+        // Image Modal Functions
+        function showImageModal(imageId, itemName) {
+            const modal = document.getElementById('imageModal');
+            const modalImage = document.getElementById('modalImage');
+
+            // Use full size for modal to get best quality
+            modalImage.src = `/images/file/${imageId}?size=full`;
+            modalImage.alt = itemName;
+            modal.style.display = 'block';
+
+            // Close modal when clicking outside the image
+            modal.onclick = function(event) {
+                if (event.target === modal) {
+                    closeImageModal();
+                }
+            };
+        }
+
+        function closeImageModal() {
+            const modal = document.getElementById('imageModal');
+            modal.style.display = 'none';
+        }
+
+        // Close modal with Escape key
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeImageModal();
+            }
+        });
 
         // Voice Recognition Functions
         function initializeVoiceRecognition() {
