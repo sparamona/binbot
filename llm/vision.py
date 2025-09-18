@@ -10,6 +10,10 @@ import os
 from typing import Dict, Any, Optional, List
 from openai import OpenAI
 import json
+import logging
+from utils.image_optimizer import optimize_for_vision_api
+
+logger = logging.getLogger(__name__)
 
 
 class VisionService:
@@ -49,13 +53,29 @@ class VisionService:
             return False
             
     def encode_image(self, image_path: str) -> Optional[str]:
-        """Encode image to base64 string"""
+        """Encode image to base64 string with optimization for OpenAI API"""
         try:
             with open(image_path, "rb") as image_file:
-                return base64.b64encode(image_file.read()).decode('utf-8')
+                image_data = image_file.read()
+
+            # Optimize image ONLY for OpenAI API call (original stays stored as-is)
+            optimized_data = optimize_for_vision_api(image_data, profile="balanced")
+
+            # Log optimization results
+            original_size = len(image_data)
+            optimized_size = len(optimized_data)
+            if optimized_size < original_size:
+                reduction = ((original_size - optimized_size) / original_size) * 100
+                logger.info(f"Image optimized for OpenAI API: {original_size:,} → {optimized_size:,} bytes ({reduction:.1f}% reduction)")
+            else:
+                logger.debug(f"Image already optimal for OpenAI API: {original_size:,} bytes")
+
+            return base64.b64encode(optimized_data).decode('utf-8')
         except Exception as e:
-            print(f"Error encoding image {image_path}: {e}")
+            logger.error(f"Error encoding image {image_path}: {e}")
             return None
+
+
             
     def identify_item(self, image_path: str, context: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -160,6 +180,8 @@ If there are multiple items, include each one as a separate object in the "items
                 "success": False,
                 "error": f"Vision API error: {str(e)}"
             }
+
+
 
     def search_by_image(self, image_path: str, search_query: Optional[str] = None) -> Dict[str, Any]:
         """
