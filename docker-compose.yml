@@ -3,8 +3,11 @@ services:
     build: .
     ports:
       - "${PORT:-8000}:8000"
+    env_file:
+      - .env
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
     volumes:
       - ./data:/app/data

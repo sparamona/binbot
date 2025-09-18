@@ -40,56 +40,64 @@ def test_image_upload_and_analysis():
     # Create test image
     image_data = create_test_image()
     
-    # Upload image for conversation analysis
-    files = {'file': ('test_image.jpg', image_data, 'image/jpeg')}
-    
+    # Send combined command-with-image for analysis
+    files = {'image': ('test_image.jpg', image_data, 'image/jpeg')}
+    data = {
+        'command': 'analyze this image and tell me what you see',
+        'session_id': 'test-session-123'
+    }
+
     try:
-        response = requests.post(f"{BASE_URL}/images/analyze-for-conversation", files=files)
-        print(f"Upload response status: {response.status_code}")
-        
+        response = requests.post(f"{BASE_URL}/nlp/command-with-image", files=files, data=data)
+        print(f"Analysis response status: {response.status_code}")
+
         if response.status_code == 200:
             result = response.json()
-            print(f"✅ Image uploaded successfully")
-            print(f"Image ID: {result['data']['image_id']}")
-            print(f"Analysis: {result['data']['analysis']}")
-            print(f"Identified items: {result['data']['identified_items']}")
-            return result['data']
+            if result.get('success'):
+                print(f"✅ Image analyzed successfully")
+                print(f"Message: {result['data'].get('response') or result['data'].get('message')}")
+                print(f"Image ID: {result['data'].get('image_id')}")
+                return result['data']
+            else:
+                print(f"❌ Analysis failed: {result}")
+                return None
         else:
-            print(f"❌ Upload failed: {response.text}")
+            print(f"❌ Request failed: {response.text}")
             return None
-            
+
     except Exception as e:
-        print(f"❌ Upload error: {e}")
+        print(f"❌ Analysis error: {e}")
         return None
 
-def test_nlp_command_with_image_context(image_data):
-    """Test NLP command with image context"""
-    print("\n🔄 Testing NLP command with image context...")
-    
-    # Prepare the command request with image context
-    request_data = {
-        "command": "add all these items to bin 100",
-        "session_id": "test-session-123",
-        "image_context": {
-            "image_id": image_data['image_id'],
-            "analysis": image_data['analysis'],
-            "identified_items": image_data['identified_items']
-        }
+def test_nlp_command_with_image_combined():
+    """Test NLP command with image in a single call"""
+    print("\n🔄 Testing NLP command with image (single-call)...")
+
+    # Create test image
+    image_bytes = create_test_image()
+    files = {'image': ('test_image.jpg', image_bytes, 'image/jpeg')}
+    data = {
+        'command': 'add all these items to bin 100',
+        'session_id': 'test-session-123'
     }
-    
+
     try:
-        response = requests.post(f"{BASE_URL}/nlp/process-command", json=request_data)
-        print(f"NLP command response status: {response.status_code}")
-        
+        response = requests.post(f"{BASE_URL}/nlp/command-with-image", files=files, data=data)
+        print(f"NLP response status: {response.status_code}")
+
         if response.status_code == 200:
             result = response.json()
-            print(f"✅ NLP command processed successfully")
-            print(f"Response: {result['data']['response']}")
-            return result['data']
+            if result.get('success'):
+                print(f"✅ NLP command processed successfully")
+                print(f"Response: {result['data'].get('response') or result['data'].get('message')}")
+                return result['data']
+            else:
+                print(f"❌ NLP command failed: {result}")
+                return None
         else:
-            print(f"❌ NLP command failed: {response.text}")
+            print(f"❌ NLP request failed: {response.text}")
             return None
-            
+
     except Exception as e:
         print(f"❌ NLP command error: {e}")
         return None
@@ -145,12 +153,12 @@ def main():
         print("❌ Image upload test failed - aborting")
         return
     
-    # Test 2: Process NLP command with image context
-    nlp_result = test_nlp_command_with_image_context(image_data)
+    # Test 2: Process NLP command with image in a single call
+    nlp_result = test_nlp_command_with_image_combined()
     if not nlp_result:
         print("❌ NLP command test failed - aborting")
         return
-    
+
     # Wait a moment for processing
     print("\n⏳ Waiting for processing to complete...")
     time.sleep(2)

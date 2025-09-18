@@ -254,15 +254,15 @@
                 gap: 0.5rem;
                 padding: 0.5rem;
             }
-            
+
             .chat-messages {
                 padding: 0.75rem;
             }
-            
+
             .chat-input-area {
                 padding: 0.75rem;
             }
-            
+
             .bin-content {
                 padding: 0.75rem;
             }
@@ -355,11 +355,11 @@
                     },
                     ...options
                 });
-                
+
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
-                
+
                 return await response.json();
             } catch (error) {
                 console.error('API call failed:', error);
@@ -675,10 +675,15 @@
                     }
 
                 } else {
-                    // No bin specified - use the analyze-for-conversation endpoint like the test page
-                    const response = await fetch(`${API_BASE}/images/analyze-for-conversation`, {
+                    // No bin specified - use the single-call NLP endpoint to analyze with a default command
+                    const fd = new FormData();
+                    fd.append('command', 'analyze this image and tell me what you see');
+                    fd.append('session_id', chatSessionId);
+                    fd.append('image', imageBlob, 'camera-photo.jpg');
+
+                    const response = await fetch(`${API_BASE}/nlp/command-with-image`, {
                         method: 'POST',
-                        body: formData
+                        body: fd
                     });
 
                     if (!response.ok) {
@@ -688,25 +693,16 @@
                     const data = await response.json();
 
                     if (data.success) {
-                        const result = data.data;
-
-                        if (result.description) {
-                            addChatMessage(`📷 Image analyzed: ${result.description}`, false);
-                            addChatMessage('💡 Tip: Specify a bin ID when taking photos to automatically add identified items to your inventory.', false);
-                        } else {
-                            addChatMessage('📷 Image analyzed, but no clear description was generated. Try taking a clearer photo or specify a bin ID.', false);
+                        const msg = data.data?.response || data.data?.message || 'Image analyzed.';
+                        addChatMessage(`📷 ${msg}`, false);
+                        if (data.data?.image_id) {
+                            console.log('Image uploaded with ID:', data.data.image_id);
                         }
-
-                        // Show image ID for reference
-                        if (result.image_id) {
-                            console.log('Image analyzed with ID:', result.image_id);
-                        }
-
                     } else {
                         throw new Error(data.error?.message || 'Image analysis failed');
                     }
-                }
 
+                }
             } catch (error) {
                 console.error('Error uploading image:', error);
                 addChatMessage(`❌ Error analyzing image: ${error.message}`, false);

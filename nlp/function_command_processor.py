@@ -79,10 +79,16 @@ class FunctionCommandProcessor:
             # Get conversation history for context
             messages = conversation_manager.get_messages(session_id)
 
+            # Choose tool set; if image context exists, hide direct image-analysis tools
+            functions_to_use = self.functions
+            if image_context:
+                blocked = {"analyze_image", "search_by_image", "describe_image"}
+                functions_to_use = [f for f in self.functions if f.get("function", {}).get("name") not in blocked]
+
             # Call LLM with function calling enabled
             response = await self.llm_client.chat_completion(
                 messages=messages,
-                tools=self.functions,
+                tools=functions_to_use,
                 tool_choice="auto",  # Let OpenAI decide when to call functions
                 temperature=0.7,
                 max_tokens=1000

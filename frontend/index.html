@@ -245,7 +245,7 @@
     </div>
 
 
-    
+
     <div class="grid">
 
 
@@ -487,34 +487,34 @@
             input.value = '';
 
             try {
-                let endpoint = '/nlp/command';
-                let requestBody = {
-                    command: command,
-                    session_id: chatSessionId
-                };
+                let result;
 
-                // If we have image context, use the enhanced endpoint
-                if (conversationContext.imageId) {
-                    endpoint = '/nlp/process-command';
-                    requestBody.image_context = {
-                        image_id: conversationContext.imageId,
-                        analysis: conversationContext.imageAnalysis,
-                        identified_items: conversationContext.identifiedItems
-                    };
+                if (pendingImage) {
+                    // Send combined command + image via multipart/form-data
+                    const formData = new FormData();
+                    formData.append('command', command);
+                    formData.append('session_id', chatSessionId);
+                    formData.append('image', pendingImage);
+                    // Clear after sending
+                    pendingImage = null;
+
+                    const response = await fetch('/nlp/command-with-image', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    result = await response.json();
+                } else {
+                    // Text-only command
+                    const response = await fetch('/nlp/command', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Cache-Control': 'no-cache'
+                        },
+                        body: JSON.stringify({ command, session_id: chatSessionId })
+                    });
+                    result = await response.json();
                 }
-
-
-
-                const response = await fetch(endpoint, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Cache-Control': 'no-cache'
-                    },
-                    body: JSON.stringify(requestBody)
-                });
-
-                const result = await response.json();
 
                 // Show function calls if they exist
                 if (result.success && result.data && result.data.type === 'function_calls' && result.data.results) {
@@ -2064,11 +2064,10 @@
         }
 
         // Image Upload Integration with NLP
-        let conversationContext = {
-            imageId: null,
-            imageAnalysis: null,
-            identifiedItems: []
-        };
+
+            // Optional image to send with the next command (simplified flow)
+            let pendingImage = null;
+
 
         const API_BASE = 'http://localhost:8000';
 
@@ -2127,38 +2126,9 @@
             };
             reader.readAsDataURL(file);
 
-            // Add message about analyzing image
-            addChatMessage('📷 Analyzing image...', false);
-
-            try {
-                // Upload and analyze image
-                const formData = new FormData();
-                formData.append('file', file);
-
-                const response = await fetch(`${API_BASE}/images/analyze-for-conversation`, {
-                    method: 'POST',
-                    body: formData
-                });
-
-                const data = await response.json();
-
-                if (data.success) {
-                    conversationContext.imageId = data.data.image_id;
-                    conversationContext.imageAnalysis = data.data.analysis;
-                    conversationContext.identifiedItems = data.data.identified_items || [];
-
-                    addChatMessage(data.data.analysis, false);
-
-                    if (conversationContext.identifiedItems.length > 0) {
-                        addChatMessage(`I can help you add these items to your inventory. Just tell me which bin to put them in, or ask me to add specific items.`, false);
-                    }
-                } else {
-                    addChatMessage('❌ Sorry, I had trouble analyzing that image. Please try again.', false);
-                }
-            } catch (error) {
-                addChatMessage('❌ Connection error. Please check your connection and try again.', false);
-                console.error('Image analysis error:', error);
-            }
+            // Attach image and notify user; analysis will happen with next command
+            pendingImage = file;
+            addChatMessage('📷 Image attached. It will be analyzed with your next command.', false);
         }
 
 

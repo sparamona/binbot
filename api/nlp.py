@@ -9,9 +9,9 @@ Users can interact with the system using plain English commands like:
 - "search for electronics"
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional
 import uuid
 from datetime import datetime
 
@@ -41,20 +41,7 @@ class NLPCommandRequest(BaseModel):
     command: str
     session_id: Optional[str] = None
 
-class NLPCommandWithImageRequest(BaseModel):
-    """Request model for natural language commands with image context"""
-    command: str
-    session_id: Optional[str] = None
-    image_context: Optional[dict] = None
 
-class NLPCommandResponse(BaseModel):
-    """Response model for natural language commands"""
-    success: bool
-    message: str
-    data: Optional[dict] = None
-    error: Optional[str] = None
-    suggestions: Optional[List[str]] = None
-    session_id: Optional[str] = None
 
 @router.post("/command", response_model=StandardResponse)
 async def process_natural_language_command(request: NLPCommandRequest):
@@ -132,26 +119,109 @@ async def process_natural_language_command(request: NLPCommandRequest):
         return StandardResponse(success=False, error=error_detail)
 
 
-@router.post("/process-command", response_model=StandardResponse)
-async def process_command_with_image_context(request: NLPCommandWithImageRequest):
-    """
-    Process a natural language command with optional image context
 
-    This endpoint is used for conversational image upload where the AI
-    has already analyzed an image and the user is giving commands about
-    what to do with the identified items.
+
+@router.post("/command-with-image", response_model=StandardResponse)
+async def process_command_with_image(
+    command: str = Form(...),
+    session_id: Optional[str] = Form(None),
+    image: Optional[UploadFile] = File(None)
+):
+    """
+    Process a natural language command with an optional image in a single call.
+
+    - If an image is provided, it is analyzed inline and a concise text description
+      is added to the conversation context before processing the command.
+    - No long-term image association is created here; images are stored temporarily
+      under a temp item context. Promotion to permanent storage can occur later
+      if items are added from this command flow.
     """
     try:
         if not db_client or not embedding_service or not llm_client:
             raise HTTPException(status_code=500, detail="Service dependencies not initialized")
 
-        if not request.command.strip():
-            error_detail = ErrorDetail(
-                code="EMPTY_COMMAND",
-                message="Command cannot be empty",
-                details={"command": request.command}
-            )
-            return StandardResponse(success=False, error=error_detail)
+        # Build image context if an image is provided
+        image_context = None
+        if image is not None:
+            if not image.content_type or not image.content_type.startswith('image/'):
+                error_detail = ErrorDetail(
+                    code="INVALID_FILE_TYPE",
+                    message="File must be an image",
+                    details={"content_type": image.content_type}
+                )
+                return StandardResponse(success=False, error=error_detail)
+
+            file_content = await image.read()
+            if len(file_content) > 10 * 1024 * 1024:  # 10MB limit
+                error_detail = ErrorDetail(
+                    code="FILE_TOO_LARGE",
+                    message="File size must be less than 10MB",
+                    details={"size": len(file_content)}
+                )
+                return StandardResponse(success=False, error=error_detail)
+
+            if not image_storage or not vision_service:
+                error_detail = ErrorDetail(
+                    code="SERVICE_UNAVAILABLE",
+                    message="Image analysis services not available"
+                )
+                return StandardResponse(success=False, error=error_detail)
+
+            # Save image temporarily for analysis (temp item/bin context)
+            temp_item_id = str(uuid.uuid4())
+            try:
+                image_metadata = image_storage.save_image(
+                    image_data=file_content,
+                    item_id=temp_item_id,
+                    bin_id="temp",
+                    filename=image.filename
+                )
+                actual_image_id = image_metadata.get("image_id") if image_metadata else None
+                if not actual_image_id:
+                    error_detail = ErrorDetail(
+                        code="STORAGE_ERROR",
+                        message="Failed to store image temporarily"
+                    )
+                    return StandardResponse(success=False, error=error_detail)
+
+                image_path = image_storage.get_image_path(actual_image_id, "full")
+
+                # Analyze the image once and create conversational analysis text
+                analysis_result = vision_service.identify_item(image_path, "conversation")
+
+                identified_items = []
+                if analysis_result and analysis_result.get("success") and analysis_result.get("items"):
+                    for item in analysis_result["items"]:
+                        identified_items.append({
+                            "name": item.get('item_name', 'Unknown item'),
+                            "description": item.get('description', ''),
+                            "confidence": item.get('confidence', 0.0)
+                        })
+
+                # Friendly analysis text
+                if identified_items:
+                    item_names = [item['name'] for item in identified_items]
+                    if len(item_names) == 1:
+                        analysis_text = f"🔍 I can see a {item_names[0]} in this image."
+                    elif len(item_names) == 2:
+                        analysis_text = f"🔍 I can see a {item_names[0]} and a {item_names[1]} in this image."
+                    else:
+                        items_list = ", ".join(item_names[:-1]) + f", and a {item_names[-1]}"
+                        analysis_text = f"🔍 I can see a {items_list} in this image."
+                else:
+                    analysis_text = "🔍 I can see this image, but I'm having trouble identifying specific items."
+
+                image_context = {
+                    "image_id": actual_image_id,
+                    "analysis": analysis_text,
+                    "identified_items": identified_items
+                }
+            except Exception as e:
+                error_detail = ErrorDetail(
+                    code="ANALYSIS_ERROR",
+                    message=f"Failed to analyze image: {str(e)}"
+                )
+                return StandardResponse(success=False, error=error_detail)
 
         # Initialize function-based command processor
         processor = FunctionCommandProcessor(
@@ -162,44 +232,45 @@ async def process_command_with_image_context(request: NLPCommandWithImageRequest
             image_storage=image_storage
         )
 
-        # Process the command with image context
+        # Process command immediately with optional image context
         result = await processor.process_command(
-            command_text=request.command,
-            session_id=request.session_id,
-            image_context=request.image_context
+            command_text=command,
+            session_id=session_id,
+            image_context=image_context
         )
 
         # Format response
         response_data = {
             "response": result.message,
-            "command_processed": request.command,
+            "message": result.message,  # keep both keys for UI compatibility
+            "command_processed": command,
             "timestamp": datetime.now().isoformat()
         }
-
+        if image_context:
+            response_data.update({
+                "image_id": image_context.get("image_id"),
+                "identified_items": image_context.get("identified_items", []),
+                "analysis": image_context.get("analysis")
+            })
         if result.data:
             response_data.update(result.data)
 
         if result.success:
-            return StandardResponse(
-                success=True,
-                data=response_data
-            )
+            return StandardResponse(success=True, data=response_data)
         else:
             error_detail = ErrorDetail(
                 code="COMMAND_FAILED",
                 message=result.message,
-                details={"command": request.command, "error": result.error}
+                details={"command": command, "error": result.error}
             )
             return StandardResponse(success=False, error=error_detail)
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error processing command with image context: {e}")
         error_detail = ErrorDetail(
             code="PROCESSING_ERROR",
-            message="Failed to process command",
-            details={"command": request.command, "error": str(e)}
+            message=f"Failed to process command with image: {str(e)}"
         )
         return StandardResponse(success=False, error=error_detail)
 

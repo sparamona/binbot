@@ -23,17 +23,27 @@ class VisionService:
     def initialize(self) -> bool:
         """Initialize the OpenAI client"""
         try:
-            llm_config = self.config.get("llm", {})
-            openai_config = llm_config.get("openai", {})
-            api_key = openai_config.get("api_key")
-            
+            # Get API key from environment variable first, then config
+            api_key = os.environ.get('OPENAI_API_KEY')
+
             if not api_key:
-                print("OpenAI API key not found in configuration")
+                # Fallback to config file
+                llm_config = self.config.get("llm", {})
+                openai_config = llm_config.get("openai", {})
+                api_key = openai_config.get("api_key")
+
+                # Skip if it's still a placeholder
+                if api_key == "${OPENAI_API_KEY}":
+                    api_key = None
+
+            if not api_key:
+                print("OpenAI API key not found in environment or configuration")
                 return False
-                
+
             self.client = OpenAI(api_key=api_key)
+            print("Vision service initialized successfully")
             return True
-            
+
         except Exception as e:
             print(f"Failed to initialize Vision service: {e}")
             return False

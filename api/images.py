@@ -5,14 +5,14 @@ This module provides endpoints for image upload, processing, and management.
 Supports image capture, storage, compression, and association with inventory items.
 """
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
-from api_schemas import StandardResponse, ErrorDetail, ImageMetadata, ImageUploadRequest
+from api_schemas import StandardResponse, ErrorDetail
 from database.chromadb_client import ChromaDBClient
 from storage.image_storage import ImageStorage
 from llm.vision import VisionService
 from llm.embeddings import EmbeddingService
-from typing import Optional, List
+from typing import Optional
 import uuid
 from datetime import datetime
 import os
@@ -786,106 +786,3 @@ async def describe_image_for_accessibility(image_id: str):
         return StandardResponse(success=False, error=error_detail)
 
 
-@router.post("/analyze-for-conversation", response_model=StandardResponse)
-async def analyze_image_for_conversation(file: UploadFile = File(...)):
-    """Analyze an image for conversational interaction - no items created yet"""
-    try:
-        if not image_storage or not vision_service:
-            raise HTTPException(status_code=500, detail="Services not initialized")
-
-        # Validate file
-        if not file.content_type or not file.content_type.startswith('image/'):
-            error_detail = ErrorDetail(
-                code="INVALID_FILE_TYPE",
-                message="File must be an image",
-                details={"content_type": file.content_type}
-            )
-            return StandardResponse(success=False, error=error_detail)
-
-        # Read and validate file size
-        file_content = await file.read()
-        if len(file_content) > 10 * 1024 * 1024:  # 10MB limit
-            error_detail = ErrorDetail(
-                code="FILE_TOO_LARGE",
-                message="File size must be less than 10MB",
-                details={"size": len(file_content)}
-            )
-            return StandardResponse(success=False, error=error_detail)
-
-        # Store image temporarily for analysis
-        temp_item_id = str(uuid.uuid4())
-
-        # Save image temporarily
-        image_metadata = image_storage.save_image(
-            image_data=file_content,
-            item_id=temp_item_id,
-            bin_id="temp",
-            filename=file.filename
-        )
-        if not image_metadata:
-            error_detail = ErrorDetail(
-                code="STORAGE_ERROR",
-                message="Failed to store image temporarily"
-            )
-            return StandardResponse(success=False, error=error_detail)
-
-        # Get the actual image_id from the metadata
-        actual_image_id = image_metadata.get("image_id")
-        if not actual_image_id:
-            error_detail = ErrorDetail(
-                code="STORAGE_ERROR",
-                message="Failed to get image ID from storage"
-            )
-            return StandardResponse(success=False, error=error_detail)
-
-        # Analyze image with vision AI
-        try:
-            # Get image path for analysis
-            image_path = image_storage.get_image_path(actual_image_id, "full")
-            analysis_result = vision_service.identify_item(image_path, "conversation")
-
-            # Parse the analysis to extract individual items
-            identified_items = []
-            if analysis_result and analysis_result.get("success") and analysis_result.get("items"):
-                for item in analysis_result["items"]:
-                    identified_items.append({
-                        "name": item.get('item_name', 'Unknown item'),
-                        "description": item.get('description', ''),
-                        "confidence": item.get('confidence', 0.0)
-                    })
-
-            # Create a conversational response
-            if identified_items:
-                item_names = [item['name'] for item in identified_items]
-                if len(item_names) == 1:
-                    analysis_text = f"🔍 I can see a {item_names[0]} in this image. What would you like me to do with it?"
-                elif len(item_names) == 2:
-                    analysis_text = f"🔍 I can see a {item_names[0]} and a {item_names[1]} in this image. What should I do with these items?"
-                else:
-                    items_list = ", ".join(item_names[:-1]) + f", and a {item_names[-1]}"
-                    analysis_text = f"🔍 I can see a {items_list} in this image. What would you like me to do with these items?"
-            else:
-                analysis_text = "🔍 I can see this image, but I'm having trouble identifying specific items. Can you tell me what you'd like me to help you with?"
-
-        except Exception as vision_error:
-            print(f"Vision analysis error: {vision_error}")
-            analysis_text = "🔍 I can see your image! What items would you like me to help you add to your inventory?"
-            identified_items = []
-
-        return StandardResponse(
-            success=True,
-            data={
-                "image_id": actual_image_id,
-                "analysis": analysis_text,
-                "identified_items": identified_items,
-                "temporary": True
-            }
-        )
-
-    except Exception as e:
-        error_detail = ErrorDetail(
-            code="ANALYSIS_ERROR",
-            message=f"Failed to analyze image: {str(e)}",
-            details={"filename": file.filename if file else None}
-        )
-        return StandardResponse(success=False, error=error_detail)
