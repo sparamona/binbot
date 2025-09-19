@@ -28,8 +28,8 @@ class ImageOptimizer:
         "balanced": {
             "max_width": 1024,
             "max_height": 768,
-            "quality": 85,
-            "max_file_size": 500_000,  # 500KB
+            "quality": 75,  # OPTIMIZATION 1: Reduced from 85 to 75 for faster processing
+            "max_file_size": 50_000,  # OPTIMIZATION 2: Reduced from 500KB to 50KB to optimize real images
             "description": "Best balance of quality and performance (recommended)"
         },
         "quality": {

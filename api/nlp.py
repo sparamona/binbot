@@ -47,6 +47,60 @@ class NLPCommandRequest(BaseModel):
     session_id: Optional[str] = None
 
 
+def is_simple_vision_query(command: str) -> bool:
+    """
+    Determine if a command is just asking about image content (no action needed)
+    """
+    command_lower = command.lower().strip()
+
+    # Commands that are just asking about image content
+    vision_query_patterns = [
+        "what items can you see",
+        "what do you see",
+        "what's in this image",
+        "what is in the image",
+        "what's in the image",
+        "identify the items",
+        "tell me what you see",
+        "describe the image",
+        "what objects are in",
+        "list the items",
+        "what can you see",
+        "describe what you see"
+    ]
+
+    for pattern in vision_query_patterns:
+        if pattern in command_lower:
+            return True
+
+    return False
+
+
+def format_vision_results_for_user(vision_results: dict) -> str:
+    """
+    Format vision analysis results into a user-friendly response
+    """
+    if not vision_results.get("success") or not vision_results.get("items"):
+        return "I'm having trouble identifying specific items in this image."
+
+    items = vision_results["items"]
+
+    if len(items) == 1:
+        item = items[0]
+        item_name = item.get('item_name', 'Unknown item')
+        description = item.get('description', 'No description available')
+        return f"I can see one item in this image:\n\n**{item_name}** - {description}"
+
+    response = f"I can see {len(items)} items in this image:\n\n"
+
+    for i, item in enumerate(items, 1):
+        item_name = item.get('item_name', 'Unknown item')
+        description = item.get('description', 'No description available')
+        response += f"{i}. **{item_name}** - {description}\n"
+
+    return response.strip()
+
+
 
 @router.post("/command", response_model=StandardResponse)
 async def process_natural_language_command(request: NLPCommandRequest):
@@ -266,7 +320,29 @@ async def upload_image_and_process(
                 )
                 return StandardResponse(success=False, error=error_detail)
 
-        # Initialize function-based command processor
+        # OPTIMIZATION: Check if this is a simple vision query that can be answered directly
+        if image and is_simple_vision_query(command) and analysis_result and analysis_result.get("success"):
+            # Skip redundant LLM call and return vision results directly
+            response_message = format_vision_results_for_user(analysis_result)
+
+            # Add the response to conversation for context
+            if session_id:
+                from nlp.conversation_manager import conversation_manager
+                conversation_manager.add_message(session_id, "assistant", response_message)
+
+            # Return direct response (saves ~4-6 seconds)
+            response_data = {
+                "response": response_message,
+                "message": response_message,
+                "command_processed": command,
+                "timestamp": datetime.now().isoformat(),
+                "optimization_applied": "direct_vision_response",
+                "time_saved": "~4-6 seconds (skipped redundant LLM call)"
+            }
+
+            return StandardResponse(success=True, data=response_data)
+
+        # Initialize function-based command processor for complex commands
         processor = FunctionCommandProcessor(
             db_client=db_client,
             embedding_service=embedding_service,

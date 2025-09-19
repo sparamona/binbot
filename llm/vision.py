@@ -106,7 +106,7 @@ class VisionService:
             prompt = f"""Analyze this image and identify ALL distinct items shown. For each item, provide:
 
 1. Item name (be specific but concise)
-2. Description with SPECIFIC OBSERVABLE FEATURES (color, size, material, brand markings, unique characteristics, text/logos, etc.)
+2. Description with SPECIFIC OBSERVABLE FEATURES (color, size, material, brand markings, unique characteristics, condition, wear patterns, text/logos, etc.)
 
 {context_msg}
 
@@ -117,7 +117,7 @@ Please respond in JSON format with the following structure:
     "items": [
         {{
             "item_name": "specific item name",
-            "description": "detailed description with specific observable features - colors, materials, markings, size, unique characteristics, etc."
+            "description": "detailed description with specific observable features - colors, materials, markings, condition, size, unique characteristics, etc."
         }}
     ],
     "total_items": 1,
@@ -143,7 +143,7 @@ If there are multiple items, include each one as a separate object in the "items
                         ]
                     }
                 ],
-                max_tokens=500,
+                max_tokens=300,  # OPTIMIZATION 3: Reduced from 500 to 300 for faster processing
                 temperature=0.1,  # Low temperature for consistent results
                 response_format={"type": "json_object"}  # Force JSON output
             )
