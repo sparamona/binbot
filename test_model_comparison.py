@@ -60,6 +60,7 @@ def test_openai_model(client, model_name, base64_image, prompt, max_completion_t
         duration = end_time - start_time
         
         # Extract response content
+        print(response)
         content = response.choices[0].message.content
         
         # Try to parse JSON to validate format
@@ -136,11 +137,36 @@ def test_gemini_model(model_name, image, prompt, max_tokens=500):
         # Initialize Gemini model
         model = genai.GenerativeModel(model_name)
 
-        # Create the prompt with JSON format instruction
-        full_prompt = f"{prompt}\n\nIMPORTANT: Respond ONLY with valid JSON. Do not include any text before or after the JSON."
+        # Define the expected JSON schema
+        response_schema = {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "item_name": {"type": "string"},
+                            "description": {"type": "string"}
+                        },
+                        "required": ["item_name", "description"]
+                    }
+                },
+                "total_items": {"type": "integer"},
+                "analysis_notes": {"type": "string"}
+            },
+            "required": ["items", "total_items", "analysis_notes"]
+        }
 
-        # Generate response
-        response = model.generate_content([full_prompt, image])
+        # Generate response with JSON format enforcement
+        response = model.generate_content(
+            [prompt, image],
+            generation_config=genai.GenerationConfig(
+                response_mime_type="application/json",
+                response_schema=response_schema,
+                max_output_tokens=max_tokens
+            )
+        )
 
         end_time = time.time()
         duration = end_time - start_time
@@ -255,39 +281,20 @@ def main():
         print(f"❌ Error loading image: {e}")
         return
     
-    # Test prompt (from user request)
-    prompt = """Analyze this image and identify ALL distinct items shown. For each item, provide:
-
-1. Item name (be specific but concise)
-2. Description with SPECIFIC OBSERVABLE FEATURES (color, size, material, brand markings, unique characteristics, condition, wear patterns, text/logos, etc.)
-
-Focus on what you can actually see in the image. Include distinguishing features that would help someone identify this specific item. Avoid generic explanations of what the item type is used for.
-
-Please respond in JSON format with the following structure:
-{
-    "items": [
-        {
-            "item_name": "specific item name",
-            "description": "detailed description with specific observable features - colors, materials, markings, condition, size, unique characteristics, etc."
-        }
-    ],
-    "total_items": 1,
-    "analysis_notes": "overall observations about the image"
-}
-
-If there are multiple items, include each one as a separate object in the "items" array."""
+    # Test prompt (simplified since schema handles structure)
+    prompt = """Analyze this image and identify ALL distinct items shown. For each item, provide a specific name and detailed description of observable features including colors, materials, brand markings, unique characteristics, condition, wear patterns, text/logos, and size. Focus on what you can actually see rather than generic explanations. Also provide overall observations about the image."""
     
     # Models to test
     openai_models = [
-        "gpt-5",      
-        "gpt-5-mini",      
+        #"gpt-5",      
+        #"gpt-5-mini",      
         "gpt-5-nano",      
     ]
 
     gemini_models = [
-        "gemini-2.5-flash",     
+        # "gemini-2.5-flash",     
         "gemini-2.5-flash-lite",       
-        "gemini-2.5-pro"
+        # "gemini-2.5-pro"
     ] if test_gemini else []
 
     all_models = openai_models + gemini_models
@@ -304,7 +311,7 @@ If there are multiple items, include each one as a separate object in the "items
     for i, model in enumerate(all_models):
         if model.startswith("gpt"):
             # OpenAI model
-            result = test_openai_model(client, model, base64_image, prompt, max_completion_tokens=500)
+            result = test_openai_model(client, model, base64_image, prompt, max_completion_tokens=3000)
         else:
             # Gemini model
             result = test_gemini_model(model, gemini_image, prompt, max_tokens=500)
