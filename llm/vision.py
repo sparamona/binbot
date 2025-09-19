@@ -1,64 +1,46 @@
 """
-OpenAI Vision API Integration for BinBot
+LLM Vision API Integration for BinBot
 
-This module provides image analysis capabilities using OpenAI's Vision API
+This module provides image analysis capabilities using various LLM providers
 for automatic item identification, description generation, and visual search.
 """
 
-import base64
-import os
-from typing import Dict, Any, Optional, List
-from openai import OpenAI
 import json
 import logging
+from typing import Dict, Any, Optional, List
 from utils.image_optimizer import optimize_for_vision_api
+from .client import LLMClient
 
 logger = logging.getLogger(__name__)
 
 
 class VisionService:
-    """OpenAI Vision API service for image analysis"""
-    
-    def __init__(self, config: Dict[str, Any]):
+    """LLM Vision API service for image analysis"""
+
+    def __init__(self, config: Dict[str, Any], llm_client: Optional[LLMClient] = None):
         self.config = config
-        self.client = None
-        self.model = "gpt-4o"  # Updated OpenAI Vision model
-        
+        self.llm_client = llm_client
+
     def initialize(self) -> bool:
-        """Initialize the OpenAI client"""
-        try:
-            # Get API key from environment variable first, then config
-            api_key = os.environ.get('OPENAI_API_KEY')
-
-            if not api_key:
-                # Fallback to config file
-                llm_config = self.config.get("llm", {})
-                openai_config = llm_config.get("openai", {})
-                api_key = openai_config.get("api_key")
-
-                # Skip if it's still a placeholder
-                if api_key == "${OPENAI_API_KEY}":
-                    api_key = None
-
-            if not api_key:
-                print("OpenAI API key not found in environment or configuration")
-                return False
-
-            self.client = OpenAI(api_key=api_key)
-            print("Vision service initialized successfully")
-            return True
-
-        except Exception as e:
-            print(f"Failed to initialize Vision service: {e}")
+        """Initialize the vision service"""
+        if not self.llm_client:
+            print("LLM client not provided to VisionService")
             return False
-            
-    def encode_image(self, image_path: str) -> Optional[str]:
-        """Encode image to base64 string with optimization for OpenAI API"""
+
+        if not self.llm_client.validate_connection():
+            print("LLM client not properly initialized")
+            return False
+
+        print("Vision service initialized successfully")
+        return True
+
+    def _load_and_optimize_image(self, image_path: str) -> Optional[bytes]:
+        """Load and optimize image for LLM API"""
         try:
             with open(image_path, "rb") as image_file:
                 image_data = image_file.read()
 
-            # Optimize image ONLY for OpenAI API call (original stays stored as-is)
+            # Optimize image for LLM API call (original stays stored as-is)
             optimized_data = optimize_for_vision_api(image_data, profile="balanced")
 
             # Log optimization results
@@ -66,42 +48,40 @@ class VisionService:
             optimized_size = len(optimized_data)
             if optimized_size < original_size:
                 reduction = ((original_size - optimized_size) / original_size) * 100
-                logger.info(f"Image optimized for OpenAI API: {original_size:,} → {optimized_size:,} bytes ({reduction:.1f}% reduction)")
+                logger.info(f"Image optimized for LLM API: {original_size:,} → {optimized_size:,} bytes ({reduction:.1f}% reduction)")
             else:
-                logger.debug(f"Image already optimal for OpenAI API: {original_size:,} bytes")
+                logger.debug(f"Image already optimal for LLM API: {original_size:,} bytes")
 
-            return base64.b64encode(optimized_data).decode('utf-8')
+            return optimized_data
         except Exception as e:
-            logger.error(f"Error encoding image {image_path}: {e}")
+            logger.error(f"Error loading image {image_path}: {e}")
             return None
 
-
-            
-    def identify_item(self, image_path: str, context: Optional[str] = None) -> Dict[str, Any]:
+    async def identify_item(self, image_path: str, context: Optional[str] = None) -> Dict[str, Any]:
         """
         Identify an item in an image and generate description
-        
+
         Args:
             image_path: Path to the image file
             context: Optional context about where the item is located
-            
+
         Returns:
             Dictionary with identification results
         """
         try:
-            if not self.client:
+            if not self.llm_client:
                 return {"success": False, "error": "Vision service not initialized"}
-                
-            # Encode image
-            base64_image = self.encode_image(image_path)
-            if not base64_image:
-                return {"success": False, "error": "Failed to encode image"}
-                
+
+            # Load and optimize image
+            image_data = self._load_and_optimize_image(image_path)
+            if not image_data:
+                return {"success": False, "error": "Failed to load image"}
+
             # Prepare context message
             context_msg = ""
             if context:
                 context_msg = f" This item is located in {context}."
-                
+
             # Create prompt for item identification
             prompt = f"""Analyze this image and identify ALL distinct items shown. For each item, provide:
 
@@ -126,79 +106,72 @@ Please respond in JSON format with the following structure:
 
 If there are multiple items, include each one as a separate object in the "items" array."""
 
-            # Make API call
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{base64_image}"
-                                }
-                            }
-                        ]
-                    }
-                ],
-                max_tokens=300,  # OPTIMIZATION 3: Reduced from 500 to 300 for faster processing
-                temperature=0.1,  # Low temperature for consistent results
-                response_format={"type": "json_object"}  # Force JSON output
+            # Make API call using centralized client
+            response = await self.llm_client.analyze_image(
+                image_data=image_data,
+                prompt=prompt,
+                max_tokens=300,
+                temperature=0.1,
+                response_format="json_object"
             )
-            
-            # Parse response
-            content = response.choices[0].message.content
-            
-            # Parse JSON response (should be clean JSON due to response_format)
-            try:
-                result = json.loads(content)
+
+            if not response.success:
+                return {"success": False, "error": response.error}
+
+            # If we got structured data, use it; otherwise parse the content
+            if response.structured_data:
+                result = response.structured_data
                 result["success"] = True
                 return result
-            except json.JSONDecodeError:
-                # Fallback if JSON parsing still fails
-                return {
-                    "success": True,
-                    "items": [{
-                        "item_name": "Unknown Item",
-                        "description": content
-                    }],
-                    "total_items": 1,
-                    "raw_response": content
-                }
-                
+            elif response.content:
+                try:
+                    result = json.loads(response.content)
+                    result["success"] = True
+                    return result
+                except json.JSONDecodeError:
+                    # Fallback if JSON parsing fails
+                    return {
+                        "success": True,
+                        "items": [{
+                            "item_name": "Unknown Item",
+                            "description": response.content
+                        }],
+                        "total_items": 1,
+                        "raw_response": response.content
+                    }
+            else:
+                return {"success": False, "error": "No content in response"}
+
         except Exception as e:
             return {
                 "success": False,
                 "error": f"Vision API error: {str(e)}"
             }
 
-
-
-    def search_by_image(self, image_path: str, search_query: Optional[str] = None) -> Dict[str, Any]:
+    async def search_by_image(self, image_path: str, search_query: Optional[str] = None) -> Dict[str, Any]:
         """
         Generate search terms based on image content
-        
+
         Args:
             image_path: Path to the image file
             search_query: Optional additional search context
-            
+
         Returns:
             Dictionary with search terms and suggestions
         """
         try:
-            if not self.client:
+            if not self.llm_client:
                 return {"success": False, "error": "Vision service not initialized"}
-                
-            base64_image = self.encode_image(image_path)
-            if not base64_image:
-                return {"success": False, "error": "Failed to encode image"}
-                
+
+            # Load and optimize image
+            image_data = self._load_and_optimize_image(image_path)
+            if not image_data:
+                return {"success": False, "error": "Failed to load image"}
+
             search_context = ""
             if search_query:
                 search_context = f" The user is looking for: {search_query}"
-                
+
             prompt = f"""Analyze this image and generate search terms that would help find similar items in an inventory system. Please provide:
 
 1. Primary search terms (most important keywords)
@@ -217,66 +190,65 @@ Respond in JSON format:
     "suggested_query": "optimized search query string"
 }}"""
 
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{base64_image}"
-                                }
-                            }
-                        ]
-                    }
-                ],
+            # Make API call using centralized client
+            response = await self.llm_client.analyze_image(
+                image_data=image_data,
+                prompt=prompt,
                 max_tokens=300,
-                temperature=0.2
+                temperature=0.2,
+                response_format="json_object"
             )
-            
-            content = response.choices[0].message.content
-            
-            try:
-                result = json.loads(content)
+
+            if not response.success:
+                return {"success": False, "error": response.error}
+
+            # If we got structured data, use it; otherwise parse the content
+            if response.structured_data:
+                result = response.structured_data
                 result["success"] = True
                 return result
-            except json.JSONDecodeError:
-                return {
-                    "success": True,
-                    "primary_terms": ["unknown"],
-                    "secondary_terms": [],
-                    "categories": ["misc"],
-                    "alternatives": [],
-                    "suggested_query": search_query or "unknown item",
-                    "raw_response": content
-                }
-                
+            elif response.content:
+                try:
+                    result = json.loads(response.content)
+                    result["success"] = True
+                    return result
+                except json.JSONDecodeError:
+                    return {
+                        "success": True,
+                        "primary_terms": ["unknown"],
+                        "secondary_terms": [],
+                        "categories": ["misc"],
+                        "alternatives": [],
+                        "suggested_query": search_query or "unknown item",
+                        "raw_response": response.content
+                    }
+            else:
+                return {"success": False, "error": "No content in response"}
+
         except Exception as e:
             return {
                 "success": False,
                 "error": f"Vision search error: {str(e)}"
             }
-            
-    def describe_for_accessibility(self, image_path: str) -> Dict[str, Any]:
+
+    async def describe_for_accessibility(self, image_path: str) -> Dict[str, Any]:
         """
         Generate detailed description for accessibility/screen readers
-        
+
         Args:
             image_path: Path to the image file
-            
+
         Returns:
             Dictionary with accessibility description
         """
         try:
-            if not self.client:
+            if not self.llm_client:
                 return {"success": False, "error": "Vision service not initialized"}
-                
-            base64_image = self.encode_image(image_path)
-            if not base64_image:
-                return {"success": False, "error": "Failed to encode image"}
+
+            # Load and optimize image
+            image_data = self._load_and_optimize_image(image_path)
+            if not image_data:
+                return {"success": False, "error": "Failed to load image"}
                 
             prompt = """Provide a detailed description of this image for accessibility purposes. Include:
 
@@ -288,29 +260,21 @@ Respond in JSON format:
 
 Make the description clear and comprehensive for someone who cannot see the image."""
 
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{base64_image}"
-                                }
-                            }
-                        ]
-                    }
-                ],
+            # Make API call using centralized client
+            response = await self.llm_client.analyze_image(
+                image_data=image_data,
+                prompt=prompt,
                 max_tokens=400,
                 temperature=0.3
             )
-            
+
+            if not response.success:
+                return {"success": False, "error": response.error}
+
             return {
                 "success": True,
-                "description": response.choices[0].message.content
+                "description": response.content or "No description available",
+                "purpose": "accessibility"
             }
             
         except Exception as e:

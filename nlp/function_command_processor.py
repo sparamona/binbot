@@ -92,21 +92,18 @@ class FunctionCommandProcessor:
         """Process the LLM response and handle function calls"""
         
         try:
-            choice = response.choices[0]
-            message = choice.message
-            
             # Check if the LLM wants to call functions
-            if hasattr(message, 'tool_calls') and message.tool_calls:
-                return await self._handle_function_calls(message, session_id, original_command)
-            
+            if response.tool_calls:
+                return await self._handle_function_calls(response, session_id, original_command)
+
             # If no function calls, this is a regular text response
-            elif hasattr(message, 'content') and message.content:
+            elif response.content:
                 # Add assistant response to conversation
-                conversation_manager.add_message(session_id, "assistant", message.content)
-                
+                conversation_manager.add_message(session_id, "assistant", response.content)
+
                 return CommandResult(
                     success=True,
-                    message=message.content,
+                    message=response.content,
                     data={"type": "text_response"}
                 )
             
@@ -126,16 +123,16 @@ class FunctionCommandProcessor:
                 error=str(e)
             )
 
-    async def _handle_function_calls(self, message, session_id: str, original_command: str) -> CommandResult:
+    async def _handle_function_calls(self, response, session_id: str, original_command: str) -> CommandResult:
         """Handle function calls from the LLM"""
-        
+
         function_results = []
         all_successful = True
         combined_message = ""
-        
+
         try:
             # Execute each function call
-            for tool_call in message.tool_calls:
+            for tool_call in response.tool_calls:
                 if tool_call.type == "function":
                     function_name = tool_call.function.name
                     

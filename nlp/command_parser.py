@@ -76,7 +76,7 @@ class LLMCommandParser:
             )
 
             # Parse the LLM response as JSON
-            response_text = response.choices[0].message.content.strip()
+            response_text = response.content.strip()
             logger.debug(f"Raw LLM response: {response_text}")
 
             # Handle cases where LLM returns text instead of JSON

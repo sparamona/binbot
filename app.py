@@ -26,7 +26,7 @@ llm_client = LLMClient(settings.config)
 db_client = ChromaDBClient(settings.config, llm_client)
 embedding_service = EmbeddingService(llm_client)
 image_storage = ImageStorage()
-vision_service = VisionService(settings.config)
+vision_service = VisionService(settings.config, llm_client)
 startup_time: float = 0
 
 @asynccontextmanager

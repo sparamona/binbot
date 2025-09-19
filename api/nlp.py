@@ -262,7 +262,7 @@ async def upload_image_and_process(
 
                 # Analyze the image once and create conversational analysis text
                 logger.info(f"DEBUG: About to call vision_service.identify_item")
-                analysis_result = vision_service.identify_item(image_path, "conversation")
+                analysis_result = await vision_service.identify_item(image_path, "conversation")
                 logger.info(f"DEBUG: Vision service call completed")
                 logger.info(f"DEBUG: Vision analysis result: {analysis_result}")
 

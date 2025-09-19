@@ -674,7 +674,7 @@ class FunctionCallHandler:
                 )
 
             # Analyze image
-            analysis_result = self.vision_service.identify_item(image_path, context)
+            analysis_result = await self.vision_service.identify_item(image_path, context)
 
             if not analysis_result.get("success", False):
                 return FunctionCallResult(
@@ -736,7 +736,7 @@ class FunctionCallHandler:
                 )
 
             # Generate search terms
-            search_result = self.vision_service.search_by_image(image_path, additional_query)
+            search_result = await self.vision_service.search_by_image(image_path, additional_query)
 
             if not search_result.get("success", False):
                 return FunctionCallResult(
@@ -812,7 +812,7 @@ class FunctionCallHandler:
                 )
 
             # Generate description
-            description_result = self.vision_service.describe_for_accessibility(image_path)
+            description_result = await self.vision_service.describe_for_accessibility(image_path)
 
             if not description_result.get("success", False):
                 return FunctionCallResult(

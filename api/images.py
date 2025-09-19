@@ -427,7 +427,7 @@ async def analyze_image(image_id: str, context: Optional[str] = None):
             context = f"bin {metadata['bin_id']}"
 
         # Analyze image
-        analysis_result = vision_service.identify_item(image_path, context)
+        analysis_result = await vision_service.identify_item(image_path, context)
 
         if not analysis_result.get("success", False):
             error_detail = ErrorDetail(
@@ -490,7 +490,7 @@ async def search_by_image(image_id: str, query: Optional[str] = None):
             return StandardResponse(success=False, error=error_detail)
 
         # Generate search terms
-        search_result = vision_service.search_by_image(image_path, query)
+        search_result = await vision_service.search_by_image(image_path, query)
 
         if not search_result.get("success", False):
             error_detail = ErrorDetail(
@@ -552,7 +552,7 @@ async def describe_image_for_accessibility(image_id: str):
             return StandardResponse(success=False, error=error_detail)
 
         # Generate description
-        description_result = vision_service.describe_for_accessibility(image_path)
+        description_result = await vision_service.describe_for_accessibility(image_path)
 
         if not description_result.get("success", False):
             error_detail = ErrorDetail(
