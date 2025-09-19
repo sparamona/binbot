@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 from typing import Optional
 import uuid
+import json
 import logging
 from datetime import datetime
 
@@ -235,13 +236,25 @@ async def upload_image_and_process(
                         item_names = [item['name'] for item in identified_items]
                         context_message = f"I can see the following items in the uploaded image: {', '.join(item_names)}. The image ID is {actual_image_id}."
                         logger.info(f"DEBUG: Adding system message to conversation: {context_message}")
+
+                        # Also add detailed vision analysis data as a separate system message for function handler access
+                        vision_data = {
+                            "image_id": actual_image_id,
+                            "items": identified_items
+                        }
+                        vision_message = f"VISION_ANALYSIS:{json.dumps(vision_data)}"
+
+                        # Add both messages to conversation
+                        conversation_manager.add_message(session_id, "system", context_message)
+                        conversation_manager.add_message(session_id, "system", vision_message)
+                        logger.info(f"DEBUG: System messages added to conversation for session {session_id}")
                     else:
                         context_message = f"I can see an uploaded image (ID: {actual_image_id}) but I'm having trouble identifying specific items."
                         logger.info(f"DEBUG: Adding system message to conversation (no items): {context_message}")
 
-                    # Add to conversation naturally
-                    conversation_manager.add_message(session_id, "system", context_message)
-                    logger.info(f"DEBUG: System message added to conversation for session {session_id}")
+                        # Add to conversation naturally
+                        conversation_manager.add_message(session_id, "system", context_message)
+                        logger.info(f"DEBUG: System message added to conversation for session {session_id}")
                 else:
                     logger.info(f"DEBUG: No session_id provided, skipping conversation addition")
 

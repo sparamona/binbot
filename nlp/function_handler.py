@@ -67,8 +67,7 @@ class FunctionCallHandler:
                 return await self._handle_move_items(parameters)
             elif function_name == "search_for_items":
                 return await self._handle_search_items(parameters)
-            elif function_name == "describe_image_content":
-                return await self._handle_describe_image_content(parameters)
+
             elif function_name == "list_bin_contents":
                 return await self._handle_list_bin(parameters)
             elif function_name == "add_items_from_image":
@@ -100,6 +99,7 @@ class FunctionCallHandler:
         """Handle add_items_to_bin function call"""
         items = parameters.get("items", [])
         bin_id = parameters.get("bin_id")
+        image_id = parameters.get("image_id")
 
         if not items or not bin_id:
             return FunctionCallResult(
@@ -110,6 +110,12 @@ class FunctionCallHandler:
             )
 
         try:
+            # Get vision analysis data from conversation context if image_id is provided
+            vision_items_map = {}
+            if image_id and session_id:
+                vision_items_map = self._get_vision_items_from_conversation(session_id, image_id)
+                logger.info(f"Retrieved vision analysis for {len(vision_items_map)} items from conversation context")
+
             # Prepare items with embeddings (like the real add API does)
             prepared_items = []
             failed_items = []
@@ -125,8 +131,13 @@ class FunctionCallHandler:
                     })
                     continue
 
-                # Create description
-                description = f"{item_name} in bin {bin_id}"
+                # Use vision analysis description if available, otherwise create generic description
+                if item_name in vision_items_map:
+                    description = vision_items_map[item_name]["description"]
+                    logger.info(f"Using vision analysis description for '{item_name}': {description[:100]}...")
+                else:
+                    description = f"{item_name} in bin {bin_id}"
+                    logger.info(f"Using generic description for '{item_name}': {description}")
 
                 try:
                     # Generate embedding for the item
@@ -254,6 +265,54 @@ class FunctionCallHandler:
 
         except Exception as e:
             logger.error(f"Error associating image {image_id} with items: {e}")
+
+    def _get_vision_items_from_conversation(self, session_id: str, image_id: str) -> Dict[str, Dict[str, str]]:
+        """Extract vision analysis items from conversation context for a specific image"""
+        try:
+            # Import here to avoid circular imports
+            from nlp.conversation_manager import conversation_manager
+            import json
+
+            # Get conversation history
+            conversation = conversation_manager.get_conversation(session_id)
+
+            # Look for system messages containing vision analysis data for this image_id
+            vision_items = {}
+            for message in conversation.messages:
+                if (message.role == "system" and
+                    message.content.startswith("VISION_ANALYSIS:")):
+
+                    try:
+                        # Parse the JSON data from the vision analysis message
+                        json_data = message.content[len("VISION_ANALYSIS:"):]
+                        vision_data = json.loads(json_data)
+
+                        # Check if this is for the correct image
+                        if vision_data.get("image_id") == image_id:
+                            logger.info(f"Found vision analysis data for image {image_id}")
+
+                            # Create a map of item names to their detailed descriptions
+                            for item in vision_data.get("items", []):
+                                item_name = item.get("name", "")
+                                item_description = item.get("description", "")
+                                if item_name and item_description:
+                                    vision_items[item_name] = {
+                                        "description": item_description,
+                                        "confidence": item.get("confidence", 0.0)
+                                    }
+
+                            logger.info(f"Extracted {len(vision_items)} vision items: {list(vision_items.keys())}")
+                            break
+
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Failed to parse vision analysis JSON: {e}")
+                        continue
+
+            return vision_items
+
+        except Exception as e:
+            logger.error(f"Error extracting vision items from conversation: {e}")
+            return {}
 
     async def _handle_remove_items(self, parameters: Dict[str, Any]) -> FunctionCallResult:
         """Handle remove_items_from_bin function call"""
@@ -520,22 +579,7 @@ class FunctionCallHandler:
                 parameters=parameters
             )
 
-    async def _handle_describe_image_content(self, parameters: Dict[str, Any]) -> FunctionCallResult:
-        """Handle describe_image_content function call - returns image analysis from context"""
-        description = parameters.get("description", "")
 
-        # This function is called when the user asks about image content
-        # The actual image analysis should be provided in the conversation context
-        # This function just signals that we should use the image context
-        return FunctionCallResult(
-            success=True,
-            data={
-                "message": "Image content analysis requested",
-                "description": description
-            },
-            function_name="describe_image_content",
-            parameters=parameters
-        )
 
     async def _handle_list_bin(self, parameters: Dict[str, Any]) -> FunctionCallResult:
         """Handle list_bin_contents function call"""

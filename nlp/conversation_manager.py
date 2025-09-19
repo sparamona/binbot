@@ -164,7 +164,10 @@ ALWAYS use multiple function calls for operations that require:
 - Removing items by category (list first, filter by category, then remove)
 
 📸 IMAGE HANDLING:
-When you see system messages about uploaded images with identified items and image IDs, use your natural language understanding to determine when the user is referring to items from the uploaded image versus new items they're mentioning. Include the image_id parameter in add_items_to_bin calls only when the user is clearly referring to items from a recently uploaded image.
+When you see system messages about uploaded images with identified items and image IDs:
+- Use your natural language understanding to determine when the user is referring to items from the uploaded image versus new items they're mentioning
+- Include the image_id parameter in add_items_to_bin calls only when the user is clearly referring to items from a recently uploaded image
+- When users ask about image content (e.g., "What items can you see?", "What's in this image?"), respond naturally based on the image analysis in the conversation context - DO NOT call functions for these questions, just describe what you can see from the system messages
 
 ⚠️ CRITICAL GUIDELINES:
 - ALWAYS call functions when you have enough information - don't just provide conversational responses
@@ -213,19 +216,16 @@ class ConversationManager:
     
     def add_user_message(self, session_id: str, content: str) -> None:
         """Add a user message to the conversation"""
-        logger.debug(f"Adding user message to session {session_id}: {content}")
         conversation = self.get_conversation(session_id)
         conversation.add_message("user", content)
 
     def add_assistant_message(self, session_id: str, content: str) -> None:
         """Add an assistant message to the conversation"""
-        logger.debug(f"Adding assistant message to session {session_id}: {content[:100]}...")
         conversation = self.get_conversation(session_id)
         conversation.add_message("assistant", content)
 
     def add_message(self, session_id: str, role: str, content: str, name: Optional[str] = None) -> None:
         """Add a message with any role to the conversation"""
-        logger.debug(f"Adding {role} message to session {session_id}: {content[:100]}...")
         conversation = self.get_conversation(session_id)
         conversation.add_message(role, content, name)
 

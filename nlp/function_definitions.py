@@ -103,24 +103,6 @@ def get_inventory_functions() -> List[Dict[str, Any]]:
         {
             "type": "function",
             "function": {
-                "name": "describe_image_content",
-                "description": "Describe what items are visible in an uploaded image when the user asks about image content",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "description": {
-                            "type": "string",
-                            "description": "A description of what the user is asking about the image"
-                        }
-                    },
-                    "required": ["description"],
-                    "additionalProperties": False
-                }
-            }
-        },
-        {
-            "type": "function",
-            "function": {
                 "name": "search_for_items",
                 "description": "Search for items in the inventory system using semantic search",
                 "parameters": {

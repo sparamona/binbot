@@ -106,25 +106,18 @@ class VisionService:
             prompt = f"""Analyze this image and identify ALL distinct items shown. For each item, provide:
 
 1. Item name (be specific but concise)
-2. Description focusing on SPECIFIC OBSERVABLE FEATURES only (color, size, material, brand markings, unique characteristics) - avoid generic definitions of what the item is used for
-3. Category (e.g., hardware, electronics, tools, etc.)
-4. Key characteristics or features
-5. Confidence level (1-10)
+2. Description with SPECIFIC OBSERVABLE FEATURES (color, size, material, brand markings, unique characteristics, text/logos, etc.)
 
 {context_msg}
 
-Focus on what you can actually see in the image - specific colors, materials, shapes, text/logos, wear patterns, unique features, etc. Do NOT include generic explanations of what the item type is typically used for.
+Focus on what you can actually see in the image. Include distinguishing features that would help someone identify this specific item. Avoid generic explanations of what the item type is used for.
 
 Please respond in JSON format with the following structure:
 {{
     "items": [
         {{
             "item_name": "specific item name",
-            "description": "specific observable features only - colors, materials, markings, condition, etc.",
-            "category": "item category",
-            "characteristics": ["specific_feature1", "specific_feature2", "specific_feature3"],
-            "confidence": 8,
-            "additional_notes": "any other specific observable details"
+            "description": "detailed description with specific observable features - colors, materials, markings, size, unique characteristics, etc."
         }}
     ],
     "total_items": 1,
@@ -167,11 +160,11 @@ If there are multiple items, include each one as a separate object in the "items
                 # Fallback if JSON parsing still fails
                 return {
                     "success": True,
-                    "item_name": "Unknown Item",
-                    "description": content,
-                    "category": "unknown",
-                    "characteristics": [],
-                    "confidence": 5,
+                    "items": [{
+                        "item_name": "Unknown Item",
+                        "description": content
+                    }],
+                    "total_items": 1,
                     "raw_response": content
                 }
                 
