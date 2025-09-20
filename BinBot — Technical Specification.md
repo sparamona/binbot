@@ -63,7 +63,7 @@ Key behaviors:
 
   - `move_items()`: **POST /api/items/move**
     - **Purpose**: Move items between bins using item IDs
-    - **Request**: `{ source_bin_id: string, target_bin_id: string, item_ids: [string] }`
+    - **Request**: `{ target_bin_id: string, item_ids: [string] }`
     - **Response**: `{ success: boolean, moved_items: array, not_found_items: array, current_bin: string }`
 
   - `search_items()`: **POST /api/items/search**
@@ -162,14 +162,14 @@ Key behaviors:
 ### Chat Orchestration
 
 - **chat/function_wrappers.py**
-  - `InventoryFunctionWrappers`: Main class containing business logic for all inventory operations.
-  - `SessionBoundFunctionWrapper`: Binds inventory functions to a specific session.
-  - Individual wrapper methods with side effects (current_bin updates, logging, image associations).
-  - Session-bound methods match Gemini function signatures exactly (no session_id parameter).
-  - Handles embeddings, database operations, and error handling.
+  - `InventoryFunctionWrappers`: Simple class containing business logic for inventory operations.
+  - Session-bound wrapper methods: `add_items()`, `search_items()`, `get_bin_contents()`, `move_items()`, `remove_items()`.
+  - Handles embeddings generation, database operations, and session state updates.
+  - Returns simple string responses for LLM consumption.
 
 - **chat/function_definitions.py**
-  - `get_all_function_names()`: Return supported function names for the LLM's tool schema.
+  - `get_inventory_functions()`: Returns Gemini function declarations for inventory operations.
+  - `get_all_functions()`: Returns all available function definitions for LLM tool schema.
   - `get_gemini_inventory_functions()`: Complete Gemini function schemas.
   - `get_function_by_name(function_name)`: Get specific function schema by name.
 
@@ -226,8 +226,11 @@ Key behaviors:
 - **config/embeddings.py**
   - `get_embedding_model()`: Choose and configure embedding backend.
 
-- **config.yaml**
-  - Static configuration values (e.g., model names, thresholds, storage paths).
+- **config/settings.py**
+  - Simple environment variable based configuration with sensible defaults.
+
+- **config/embeddings.py**
+  - Basic embedding model configuration.
 
 ### Frontend
 - **frontend/index.html**
@@ -626,6 +629,64 @@ When retrieving items from search or list operations:
   - operation_id, type (add|remove|move), item_ids (array), bin_id(s), description, timestamp, metadata
 
 ---
+
+## Implementation Notes
+
+### Configuration Simplification
+- **Eliminated config.yaml**: Replaced complex YAML configuration with simple environment variables
+- **Direct imports**: Use `from config.settings import GEMINI_API_KEY` instead of complex configuration objects
+- **Sensible defaults**: All configuration has reasonable defaults for local development
+- **89% reduction**: Configuration system reduced from ~232 lines to ~26 lines
+
+### API Schema Improvements
+- **Optional image_id**: Item.image_id is optional since not all items have images
+- **Simplified move operation**: Removed redundant source_bin_id from MoveItemsRequest (lookup from item_ids)
+- **Minimal required fields**: Only require essential data, make everything else optional with defaults
+
+### Chat Function System
+- **Simplified function calling**: Direct Gemini function declarations without complex wrapper hierarchies
+- **Session-bound operations**: Function wrappers automatically update session state (current_bin)
+- **String responses**: Functions return simple string messages for natural LLM conversation flow
+- **Minimal error handling**: Basic try/catch with user-friendly error messages
+- **5 core functions**: add_items, search_items, get_bin_contents, move_items, remove_items
+
+### Storage Mode Configuration
+- **Dual storage modes**: `STORAGE_MODE=memory` for testing, `STORAGE_MODE=persistent` for production
+- **In-memory database**: ChromaDB uses `chromadb.Client()` for clean test isolation
+- **In-memory images**: Images stored as byte arrays in memory dictionary
+- **Clean test state**: Each test run starts with empty database and image storage
+- **No cleanup required**: Memory storage automatically cleared between test runs
+
+### Embedding Consistency Fix
+- **Single dimension source**: `EMBEDDING_DIMENSION=768` constant in config/embeddings.py
+- **Consistent embedding service**: Search uses same Gemini embedding service as storage
+- **ChromaDB collection metadata**: Specifies dimension to prevent mismatches
+- **Fixed search method**: Uses `query_embeddings` instead of `query_texts` for consistency
+
+### Semantic Search Quality Control
+- **Distance-based filtering**: `max_distance` parameter filters results by similarity threshold
+- **Optimal thresholds**: Strict (0.5), Balanced (0.7), Loose (1.0) based on empirical testing
+- **Quality metrics**: Distance 0.28-0.49 for relevant items, 0.40-0.79 for irrelevant items
+- **Confidence scoring**: `confidence_score = 1.0 - distance` for user-friendly relevance indication
+
+### Test Organization
+- **Simple structure**: `test/unit/`, `test/integration/`, `test/analysis/` directories
+- **Unit tests**: Individual component testing (config, database, session, etc.)
+- **Integration tests**: Multi-component workflow testing with in-memory storage
+- **Analysis tests**: Research scripts for parameter tuning and system analysis
+- **Test runner**: `python test/run_tests.py [quick|unit|integration|analysis|all]`
+
+### Image Analysis Testing
+- **Complete workflow test**: `test/integration/test_image_analysis.py` - Full pipeline from upload to inventory
+- **Basic vision test**: `test/integration/test_vision_basic.py` - Core image analysis functionality
+- **Real image testing**: Uses `test/coaster_pen_mouse.jpg` for consistent validation
+- **Vision service methods**: `analyze_image()` for general analysis, `analyze_image_for_items()` for structured extraction
+
+### Structured Vision Output
+- **JSON Schema Support**: Uses Gemini's `response_mime_type="application/json"` with defined schemas
+- **Reliable Parsing**: Direct JSON response from API - no text parsing needed
+- **Simple Implementation**: No fallback mechanisms - structured output only
+- **Item Schema**: Predefined schema for inventory items with name/description fields
 
 ## Non-Functional Requirements
 
