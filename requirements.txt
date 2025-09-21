@@ -5,8 +5,8 @@ fastapi==0.104.1
 uvicorn[standard]==0.24.0
 python-multipart==0.0.6
 
-# Google Gemini AI
-google-generativeai==0.3.2
+# Google Gemini AI (new SDK)
+google-genai
 
 # Vector database
 chromadb==0.4.18
@@ -16,6 +16,7 @@ Pillow==10.1.0
 
 # HTTP client for external APIs
 httpx==0.25.2
+requests==2.31.0  # for CLI frontend
 
 # Environment variables
 python-dotenv==1.0.0

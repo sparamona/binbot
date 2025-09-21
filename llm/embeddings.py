@@ -1,8 +1,9 @@
 """
-Simple embeddings service using Gemini
+Simple embeddings service using Gemini with new google-genai SDK
 """
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from typing import List
 
 from config.settings import GEMINI_API_KEY
@@ -10,19 +11,24 @@ from config.embeddings import EMBEDDING_MODEL
 
 
 class EmbeddingService:
-    """Simple embedding service using Gemini"""
-    
+    """Simple embedding service using Gemini with new SDK"""
+
     def __init__(self):
-        genai.configure(api_key=GEMINI_API_KEY)
-    
+        pass
+
+    def _create_client(self) -> genai.Client:
+        """Create a fresh Gemini client for each request"""
+        return genai.Client(api_key=GEMINI_API_KEY)
+
     def generate_embedding(self, text: str) -> List[float]:
-        """Generate embedding for a single text"""
-        result = genai.embed_content(
+        """Generate embedding for a single text using new SDK"""
+        client = self._create_client()
+        response = client.models.embed_content(
             model=f"models/{EMBEDDING_MODEL}",
-            content=text
+            contents=text
         )
-        return result['embedding']
-    
+        return response.embeddings[0].values
+
     def batch_generate_embeddings(self, texts: List[str]) -> List[List[float]]:
         """Generate embeddings for multiple texts"""
         embeddings = []

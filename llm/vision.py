@@ -1,8 +1,9 @@
 """
-Simple vision analysis using Gemini
+Simple vision analysis using Gemini with new google-genai SDK
 """
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from PIL import Image
 from typing import List, Dict
 import json
@@ -11,11 +12,14 @@ from config.settings import GEMINI_API_KEY
 
 
 class VisionService:
-    """Simple vision service using Gemini"""
+    """Simple vision service using Gemini with new SDK"""
 
     def __init__(self):
-        genai.configure(api_key=GEMINI_API_KEY)
-        self.model = genai.GenerativeModel('gemini-2.5-flash-lite')
+        pass
+
+    def _create_client(self) -> genai.Client:
+        """Create a fresh Gemini client for each request"""
+        return genai.Client(api_key=GEMINI_API_KEY)
 
         # Define JSON schema for inventory items
         self.item_schema = {
@@ -47,6 +51,12 @@ class VisionService:
             new_size = (int(image.size[0] * ratio), int(image.size[1] * ratio))
             image = image.resize(new_size, Image.Resampling.LANCZOS)
 
+        # Convert PIL Image to bytes for the API
+        import io
+        img_byte_arr = io.BytesIO()
+        image.save(img_byte_arr, format='JPEG')
+        img_bytes = img_byte_arr.getvalue()
+
         # Create prompt for structured output
         prompt = """
         Analyze this image and identify individual items that could be stored in bins.
@@ -55,21 +65,42 @@ class VisionService:
         For each item, provide a clear name and brief description including any distinguishing features.
         """
 
-        # Create model with structured output
-        structured_model = genai.GenerativeModel(
-            self.model.model_name,
-            generation_config=genai.GenerationConfig(
-                response_mime_type="application/json",
-                response_schema=self.item_schema
+        # Create content with image and text for new SDK
+        contents = [
+            types.Content(
+                role="user",
+                parts=[
+                    types.Part(text=prompt),
+                    types.Part(inline_data=types.Blob(
+                        mime_type="image/jpeg",
+                        data=img_bytes  # Pass bytes data instead of PIL Image
+                    ))
+                ]
             )
+        ]
+
+        # Configure for JSON output
+        config = types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=self.item_schema
         )
 
-        # Send to Gemini with structured output
-        response = structured_model.generate_content([prompt, image])
+        # Create fresh client for this request
+        client = self._create_client()
+
+        # Generate structured response using new SDK
+        response = client.models.generate_content(
+            model="gemini-2.5-flash-lite",
+            contents=contents,
+            config=config
+        )
 
         # Parse the structured JSON response
-        result = json.loads(response.text)
-        return result.get("items", [])
+        try:
+            result = json.loads(response.text)
+            return result.get("items", [])
+        except json.JSONDecodeError:
+            return []
 
 
 # Global vision service instance

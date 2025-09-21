@@ -2,14 +2,14 @@
 Chat endpoints for BinBot
 """
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File, Request
+from pydantic import BaseModel
 import tempfile
 import os
 from pathlib import Path
-from api_schemas import ChatRequest, ChatResponse, ImageUploadResponse, ItemInput
+from api_schemas import ChatResponse, ImageUploadResponse, ItemInput
 from llm.client import get_gemini_client
-from chat.function_definitions import get_all_functions
-from chat.function_wrappers import get_function_wrappers
+from chat.function_wrappers import get_function_wrappers, create_function_mapping
 from session.session_manager import get_session_manager
 from storage.image_storage import get_image_storage
 from llm.vision import get_vision_service
@@ -28,24 +28,30 @@ def create_function_mapping(wrappers):
     }
 
 
+class ChatCommandRequest(BaseModel):
+    """Request for chat command (message only, session from cookie)"""
+    message: str
+
 @router.post("/api/chat/command", response_model=ChatResponse)
-async def chat(request: ChatRequest):
+async def chat(chat_request: ChatCommandRequest, request: Request):
     """Chat with LLM using session-bound functions and automatic execution"""
-    if not request.session_id:
-        raise HTTPException(status_code=400, detail="Session ID required")
-    
+    # Get session ID from cookie
+    session_id = request.cookies.get('session_id')
+    if not session_id:
+        raise HTTPException(status_code=401, detail="No active session")
+
     # Get session manager and validate session
     session_manager = get_session_manager()
-    session = session_manager.get_session(request.session_id)
+    session = session_manager.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found or expired")
-    
+
     # Add user message to conversation
-    session_manager.add_message(request.session_id, "user", request.message)
+    session_manager.add_message(session_id, "user", chat_request.message)
     
     # Get conversation history
-    conversation = session_manager.get_conversation(request.session_id)
-    
+    conversation = session_manager.get_conversation(session_id)
+
     # Convert to LLM format
     messages = []
     for msg in conversation:
@@ -53,44 +59,42 @@ async def chat(request: ChatRequest):
             "role": msg["role"],
             "content": msg["content"]
         })
-    
+
     # Create session-bound function wrappers
-    wrappers = get_function_wrappers(request.session_id)
+    wrappers = get_function_wrappers(session_id)
     function_mapping = create_function_mapping(wrappers)
-    
-    # Get function definitions for LLM
-    function_definitions = get_all_functions()
-    
-    # Create tools for Gemini
-    tools = [{"function_declarations": function_definitions}]
+
+    # Tools are now the actual Python functions (automatic function calling)
+    tools = list(function_mapping.values())
     
     # Get LLM client and send chat
     llm_client = get_gemini_client()
-    
+
     try:
-        # This is a simplified approach - in a full implementation,
-        # we'd need to handle function calls properly
+        # Send to LLM with automatic function calling enabled
         response_text = llm_client.chat_completion(messages, tools)
-        
-        # Add assistant response to conversation
-        session_manager.add_message(request.session_id, "assistant", response_text)
-        
+
+        # Add model response to conversation
+        session_manager.add_message(session_id, "model", response_text)
+
         return ChatResponse(success=True, response=response_text)
-        
+
     except Exception as e:
         error_msg = f"Chat error: {str(e)}"
-        session_manager.add_message(request.session_id, "assistant", error_msg)
+        session_manager.add_message(session_id, "model", error_msg)
         return ChatResponse(success=False, response=error_msg)
 
 
 @router.post("/api/chat/image", response_model=ImageUploadResponse)
 async def chat_image(
     file: UploadFile = File(...),
-    session_id: str = Form(...)
+    request: Request = None
 ):
     """Upload image, analyze contents, and add to session context"""
+    # Get session ID from cookie
+    session_id = request.cookies.get('session_id')
     if not session_id:
-        raise HTTPException(status_code=400, detail="Session ID required")
+        raise HTTPException(status_code=401, detail="No active session")
     
     # Validate session
     session_manager = get_session_manager()
@@ -130,7 +134,7 @@ async def chat_image(
         analysis_summary = f"Image uploaded and analyzed. Found {len(analyzed_items)} items: "
         analysis_summary += ", ".join([item.name for item in analyzed_items])
         session_manager.add_message(session_id, "user", f"[Image uploaded: {file.filename}]")
-        session_manager.add_message(session_id, "assistant", analysis_summary)
+        session_manager.add_message(session_id, "model", analysis_summary)
         
         return ImageUploadResponse(
             success=True,
@@ -140,10 +144,21 @@ async def chat_image(
         
     except Exception as e:
         error_msg = f"Image analysis error: {str(e)}"
-        session_manager.add_message(session_id, "assistant", error_msg)
+        session_manager.add_message(session_id, "model", error_msg)
         raise HTTPException(status_code=500, detail=error_msg)
         
     finally:
         # Clean up temporary file
         if os.path.exists(temp_path):
-            os.unlink(temp_path)
+            try:
+                os.unlink(temp_path)
+            except PermissionError:
+                # On Windows, sometimes the file is still in use
+                # Try again after a brief moment
+                import time
+                time.sleep(0.1)
+                try:
+                    os.unlink(temp_path)
+                except PermissionError:
+                    # If still can't delete, log it but don't fail
+                    print(f"Warning: Could not delete temporary file {temp_path}")

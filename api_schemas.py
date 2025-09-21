@@ -101,6 +101,12 @@ class HealthResponse(BaseModel):
     status: str
 
 
+class SuccessResponse(BaseModel):
+    """Simple success/failure response"""
+    success: bool
+    message: Optional[str] = ""
+
+
 # Session Models
 class SessionInfo(BaseModel):
     """Session information"""

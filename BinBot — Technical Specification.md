@@ -108,13 +108,13 @@ Key behaviors:
 
 - **api/chat.py** - `chat()`: **POST /api/chat/command**
   - **Purpose**: Create session-bound functions, send to Gemini with automatic execution
-  - **Request**: `{ message: string, session_id: string }`
+  - **Request**: `{ message: string }` (session from cookie)
   - **Response**: `{ success: boolean, response: string }`
   - **Process**: Creates `SessionBoundFunctionWrapper` → Maps to Gemini functions → Auto-execution.
 
 - **api/chat.py** - `chat_image()`: **POST /api/chat/image**
   - **Purpose**: Upload image, analyze contents, and add to session context
-  - **Request**: Form: multipart file + `{ session_id: string }`
+  - **Request**: Form: multipart file (session from cookie)
   - **Response**: `{ success: boolean, image_id: string, analyzed_items: [{name: string, description: string}] }`
   - **Process**: Uploads image → Vision analysis → Stores in session context for LLM
   
@@ -176,7 +176,7 @@ Key behaviors:
 ### LLM & Vision
 - **llm/client.py**
   - `chat_completion(messages, tools)`: Call Gemini LLM with automatic function execution enabled.
-  - `GeminiProvider`: Gemini-specific implementation with AUTO mode function calling.
+  - `GeminiClient`: Uses new `google-genai` SDK (v1.38.0+) with improved function calling.
   - `tool_config`: Configured for `FunctionCallingConfig.Mode.AUTO` - functions execute automatically.
 
 - **llm/embeddings.py**
@@ -709,9 +709,19 @@ When retrieving items from search or list operations:
 - Function calling system with session binding
 - Comprehensive test suite (unit and integration tests)
 - FastAPI application with CORS and static file serving
+- CLI Frontend interface with session management and image upload support
 
-**🚧 Remaining (Tasks 14-15):**
-- Frontend interface (HTML/CSS/JS single-page application)
+**✅ Task 14 Complete:**
+- **CLI Frontend**: `frontend/cli.py` - Text-based command-line interface
+  - Session management with automatic setup/teardown
+  - Text commands via `/api/chat/command` endpoint
+  - Image upload via `/api/chat/image` endpoint with `/upload <path>` command
+  - CLI commands use "/" prefix (`/help`, `/upload`, `/quit`)
+  - Natural language commands pass through to BinBot
+  - Interactive help system and error handling
+  - Configurable API server URL
+
+**🚧 Remaining (Task 15):**
 - Final integration testing and deployment validation
 
 ## Non-Functional Requirements
