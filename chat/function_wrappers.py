@@ -2,8 +2,7 @@
 Simple function wrappers for LLM function calling
 """
 
-import logging
-from typing import List, Dict, Any, Union
+from typing import List, Dict, Any
 
 from api.inventory import (
     add_items_logic, remove_items_logic, move_items_logic,
@@ -11,10 +10,10 @@ from api.inventory import (
 )
 from api_schemas import ItemInput
 from session.session_manager import get_session_manager
+from utils.logging import setup_logger
 
 # Set up logger for function wrappers
-logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = setup_logger(__name__)
 
 
 class InventoryFunctionWrappers:

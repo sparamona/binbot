@@ -13,6 +13,10 @@ from chat.function_wrappers import get_function_wrappers, create_function_mappin
 from session.session_manager import get_session_manager
 from storage.image_storage import get_image_storage
 from llm.vision import get_vision_service
+from utils.logging import setup_logger
+
+# Set up logger for chat endpoint
+logger = setup_logger(__name__)
 
 router = APIRouter()
 
@@ -45,6 +49,10 @@ async def chat(chat_request: ChatCommandRequest, request: Request):
     session = session_manager.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found or expired")
+
+    # Log incoming chat request with current bin state
+    current_bin_before = session.get('current_bin', '')
+    logger.info(f"CHAT_REQUEST: {session_id[:8]}... message='{chat_request.message[:50]}...' current_bin_before='{current_bin_before}'")
 
     # Add user message to conversation
     session_manager.add_message(session_id, "user", chat_request.message)
@@ -81,6 +89,7 @@ async def chat(chat_request: ChatCommandRequest, request: Request):
         updated_session = session_manager.get_session(session_id)
         current_bin = updated_session.get('current_bin') if updated_session else None
 
+        logger.info(f"CHAT_RESPONSE: {session_id[:8]}... returning current_bin='{current_bin}'")
         return ChatResponse(success=True, response=response_text, current_bin=current_bin)
 
     except Exception as e:
