@@ -81,6 +81,7 @@ class ChatResponse(BaseModel):
     """Response from chat completion"""
     success: bool
     response: str
+    current_bin: Optional[str] = None
 
 
 class SessionResponse(BaseModel):

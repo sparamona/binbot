@@ -77,12 +77,21 @@ async def chat(chat_request: ChatCommandRequest, request: Request):
         # Add model response to conversation
         session_manager.add_message(session_id, "model", response_text)
 
-        return ChatResponse(success=True, response=response_text)
+        # Get current bin from session after function calls may have updated it
+        updated_session = session_manager.get_session(session_id)
+        current_bin = updated_session.get('current_bin') if updated_session else None
+
+        return ChatResponse(success=True, response=response_text, current_bin=current_bin)
 
     except Exception as e:
         error_msg = f"Chat error: {str(e)}"
         session_manager.add_message(session_id, "model", error_msg)
-        return ChatResponse(success=False, response=error_msg)
+
+        # Still include current_bin even on error
+        session = session_manager.get_session(session_id)
+        current_bin = session.get('current_bin') if session else None
+
+        return ChatResponse(success=False, response=error_msg, current_bin=current_bin)
 
 
 @router.post("/api/chat/image", response_model=ImageUploadResponse)
