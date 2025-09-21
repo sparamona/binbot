@@ -106,7 +106,7 @@ class InventoryFunctionWrappers:
             return {"success": False, "items": [], "current_bin": ""}
     
     def get_bin_contents(self, bin_id: str) -> Dict[str, Any]:
-        """Get all items in a specific storage bin.
+        """Get all items in a specific storage bin.  This is the only way to know the contents of a bin bin.
 
         Args:
             bin_id (str): ID of the bin to retrieve contents from (e.g. '3', 'A3', 'B5', 'TOOLS', '12')

@@ -50,12 +50,8 @@ async def chat(chat_request: ChatCommandRequest, request: Request):
     if not session:
         raise HTTPException(status_code=404, detail="Session not found or expired")
 
-    # Log incoming chat request with current bin state
-    current_bin_before = session.get('current_bin', '')
-    logger.info(f"CHAT_REQUEST: {session_id[:8]}... message='{chat_request.message[:50]}...' current_bin_before='{current_bin_before}'")
-
     # Add user message to conversation
-    session_manager.add_message(session_id, "user", chat_request.message)
+    session_manager.add_message(session_id, "user", chat_request.message + "\n\n Remember to abide by system instructions.  Always use the tools provided whenever possible.  Never rely on your memory for bin contents.  ALWAYS use get_bin_contents to retrieve the contents of a bin.")
     
     # Get conversation history
     conversation = session_manager.get_conversation(session_id)

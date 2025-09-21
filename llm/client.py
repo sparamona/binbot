@@ -9,6 +9,9 @@ from typing import List, Dict, Any
 from config.settings import GEMINI_API_KEY
 from llm.prompts import SYSTEM_INSTRUCTIONS
 
+# Model configuration
+GEMINI_MODEL = "gemini-2.5-flash-lite"
+
 
 class GeminiClient:
     """Simple Gemini LLM client using new google-genai SDK"""
@@ -61,7 +64,7 @@ class GeminiClient:
 
             # Send request with full context
             response = client.models.generate_content(
-                model="gemini-2.5-flash-lite",
+                model=GEMINI_MODEL,
                 contents=all_contents,
                 config=config
             )
@@ -72,7 +75,7 @@ class GeminiClient:
             )
 
             response = client.models.generate_content(
-                model="gemini-2.5-flash-lite",
+                model=GEMINI_MODEL,
                 contents=all_contents,
                 config=config
             )
@@ -83,7 +86,7 @@ class GeminiClient:
         """Simple text generation using new SDK"""
         client = self._create_client()
         response = client.models.generate_content(
-            model="gemini-2.5-flash-lite",
+            model=GEMINI_MODEL,
             contents=prompt
         )
         return response.text
