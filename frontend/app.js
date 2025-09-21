@@ -1267,7 +1267,14 @@ class BinBotUI {
 
         const contentDiv = document.createElement('div');
         contentDiv.className = 'message-content';
-        contentDiv.textContent = content;
+
+        // Render markdown for bot messages, plain text for user messages
+        if (isUser) {
+            contentDiv.textContent = content;
+        } else {
+            // Use marked.js to render markdown for bot responses
+            contentDiv.innerHTML = marked.parse(content);
+        }
 
         messageDiv.appendChild(contentDiv);
         this.elements.chatMessages.appendChild(messageDiv);

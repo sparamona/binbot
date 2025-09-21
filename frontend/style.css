@@ -137,6 +137,99 @@ body {
     margin-bottom: 0.25rem;
 }
 
+/* Markdown styling for bot messages */
+.bot-message .message-content h1,
+.bot-message .message-content h2,
+.bot-message .message-content h3,
+.bot-message .message-content h4,
+.bot-message .message-content h5,
+.bot-message .message-content h6 {
+    margin: 0.5rem 0;
+    color: #1f2937;
+    font-weight: 600;
+}
+
+.bot-message .message-content h2 {
+    font-size: 1.1rem;
+    border-bottom: 1px solid #e5e7eb;
+    padding-bottom: 0.25rem;
+}
+
+.bot-message .message-content p {
+    margin: 0.5rem 0;
+}
+
+.bot-message .message-content ul,
+.bot-message .message-content ol {
+    margin: 0.5rem 0;
+    padding-left: 1.5rem;
+}
+
+.bot-message .message-content li {
+    margin: 0.25rem 0;
+}
+
+.bot-message .message-content code {
+    background-color: #f3f4f6;
+    padding: 0.125rem 0.25rem;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9rem;
+    color: #1f2937;
+}
+
+.bot-message .message-content pre {
+    background-color: #f3f4f6;
+    padding: 0.75rem;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin: 0.5rem 0;
+    border: 1px solid #e5e7eb;
+}
+
+.bot-message .message-content pre code {
+    background-color: transparent;
+    padding: 0;
+}
+
+.bot-message .message-content strong {
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.bot-message .message-content em {
+    font-style: italic;
+    color: #6b7280;
+}
+
+.bot-message .message-content table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 0.5rem 0;
+    font-size: 0.9rem;
+}
+
+.bot-message .message-content th,
+.bot-message .message-content td {
+    border: 1px solid #e5e7eb;
+    padding: 0.5rem;
+    text-align: left;
+}
+
+.bot-message .message-content th {
+    background-color: #f9fafb;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.bot-message .message-content blockquote {
+    border-left: 3px solid #d1d5db;
+    padding-left: 1rem;
+    margin: 0.5rem 0;
+    font-style: italic;
+    color: #6b7280;
+}
+
 /* Chat Input */
 .chat-input-container {
     padding: 1rem;
