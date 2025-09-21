@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BinBot Bin Update Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; }
+        button { padding: 10px 15px; margin: 5px; }
+        .log { background: #f5f5f5; padding: 10px; margin: 10px 0; font-family: monospace; }
+        .current-bin { font-weight: bold; color: #007acc; }
+    </style>
+</head>
+<body>
+    <h1>BinBot Bin Update Test</h1>
+    
+    <div class="test-section">
+        <h2>Current State</h2>
+        <p>Current Bin: <span id="currentBin" class="current-bin">null</span></p>
+        <p>Session ID: <span id="sessionId">Not created</span></p>
+    </div>
+    
+    <div class="test-section">
+        <h2>Test Actions</h2>
+        <button onclick="createSession()">1. Create Session</button>
+        <button onclick="addToNewBin()">2. Add Item to New Bin</button>
+        <button onclick="addToDifferentBin()">3. Add Item to Different Bin</button>
+        <button onclick="addToSameBin()">4. Add Item to Same Bin</button>
+    </div>
+    
+    <div class="test-section">
+        <h2>Log</h2>
+        <div id="log" class="log"></div>
+    </div>
+
+    <script>
+        let sessionId = null;
+        let currentBin = null;
+        const apiBase = 'http://localhost:8001';
+        
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `[${timestamp}] ${message}<br>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(message);
+        }
+        
+        function updateCurrentBin(binId) {
+            currentBin = binId;
+            document.getElementById('currentBin').textContent = binId || 'null';
+        }
+        
+        async function createSession() {
+            try {
+                log('🔄 Creating session...');
+                const response = await fetch(`${apiBase}/api/session`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Session creation failed: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                sessionId = data.session_id;
+                document.getElementById('sessionId').textContent = sessionId.substring(0, 8) + '...';
+                log(`✅ Session created: ${sessionId.substring(0, 8)}...`);
+                
+            } catch (error) {
+                log(`❌ Session creation failed: ${error.message}`);
+            }
+        }
+        
+        async function sendChatMessage(message) {
+            try {
+                log(`💬 Sending: "${message}"`);
+                
+                const response = await fetch(`${apiBase}/api/chat/command`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({ message })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Chat request failed: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                log(`🤖 Response: "${data.response.substring(0, 50)}..."`);
+                log(`📦 Server current_bin: "${data.current_bin}"`);
+                log(`🔍 Frontend current_bin: "${currentBin}"`);
+                
+                // Simulate frontend bin update logic
+                if (data.current_bin) {
+                    if (data.current_bin !== currentBin) {
+                        log(`🎯 Bin change detected: "${currentBin}" → "${data.current_bin}"`);
+                        updateCurrentBin(data.current_bin);
+                        await refreshBinContents(data.current_bin);
+                    } else {
+                        log(`🔄 Same bin, refreshing contents: "${data.current_bin}"`);
+                        await refreshBinContents(data.current_bin);
+                    }
+                } else {
+                    log(`⚠️ No current_bin in response`);
+                }
+                
+            } catch (error) {
+                log(`❌ Chat request failed: ${error.message}`);
+            }
+        }
+        
+        async function refreshBinContents(binId) {
+            try {
+                log(`🔄 Refreshing contents for bin "${binId}"...`);
+                
+                const response = await fetch(`${apiBase}/api/inventory/bin/${binId}`, {
+                    method: 'GET',
+                    credentials: 'include'
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Bin contents request failed: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                log(`📋 Bin "${binId}" contains ${data.items.length} items`);
+                
+                if (data.items.length > 0) {
+                    data.items.forEach(item => {
+                        log(`   - ${item.name}`);
+                    });
+                }
+                
+            } catch (error) {
+                log(`❌ Failed to refresh bin contents: ${error.message}`);
+            }
+        }
+        
+        async function addToNewBin() {
+            await sendChatMessage('add a screwdriver to bin TEST1');
+        }
+        
+        async function addToDifferentBin() {
+            await sendChatMessage('add a hammer to bin TEST2');
+        }
+        
+        async function addToSameBin() {
+            await sendChatMessage('add a nail to the current bin');
+        }
+        
+        // Initialize
+        log('🚀 BinBot Bin Update Test initialized');
+        log('👆 Click "Create Session" to start testing');
+    </script>
+</body>
+</html>

@@ -153,13 +153,16 @@ class BinBotUI {
             this.addMessage(data.response, false);
 
             // Check if the response includes current_bin information
-            if (data.current_bin && data.current_bin !== this.currentBin) {
-                console.log(`🎯 Server reported bin change: ${this.currentBin} → ${data.current_bin}`);
-                this.currentBin = data.current_bin;
-                await this.refreshBinContents(data.current_bin);
-            } else if (data.current_bin) {
-                // Refresh current bin contents even if bin didn't change (items may have been added/removed)
-                await this.refreshBinContents(data.current_bin);
+            if (data.current_bin) {
+                // Handle bin change (including null -> bin case)
+                if (data.current_bin !== this.currentBin) {
+                    console.log(`🎯 Bin changed: ${this.currentBin} → ${data.current_bin}`);
+                    this.currentBin = data.current_bin;
+                    await this.refreshBinContents(data.current_bin);
+                } else {
+                    // Refresh current bin contents even if bin didn't change (items may have been added/removed)
+                    await this.refreshBinContents(data.current_bin);
+                }
             }
 
         } catch (error) {

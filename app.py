@@ -54,4 +54,15 @@ app = create_app()
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    import os
+
+    # Enable auto-reload in development
+    reload = os.getenv("DEVELOPMENT", "true").lower() == "true"
+
+    uvicorn.run(
+        "app:app",  # Use string reference for reload to work
+        host="0.0.0.0",
+        port=8000,
+        reload=reload,
+        reload_dirs=[".", "api", "llm", "chat", "session", "storage", "config"]
+    )

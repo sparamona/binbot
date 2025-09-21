@@ -15,13 +15,14 @@ async def start_session(response: Response):
     session_manager = get_session_manager()
     session_id = session_manager.new_session()
     
-    # Set secure HTTP-only cookie (30 minutes TTL)
+    # Set HTTP-only cookie (30 minutes TTL)
+    # Note: secure=False for development on localhost
     response.set_cookie(
         key="session_id",
         value=session_id,
         httponly=True,
-        secure=True,
-        samesite="strict",
+        secure=False,  # Allow HTTP for development
+        samesite="lax",  # Less strict for development
         max_age=30 * 60  # 30 minutes in seconds
     )
     
@@ -58,8 +59,8 @@ async def end_session(session_id: str, response: Response):
     response.delete_cookie(
         key="session_id",
         httponly=True,
-        secure=True,
-        samesite="strict"
+        secure=False,  # Match the creation settings
+        samesite="lax"
     )
     
     return SessionResponse(success=True, session_id=session_id)

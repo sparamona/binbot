@@ -15,12 +15,6 @@ class VisionService:
     """Simple vision service using Gemini with new SDK"""
 
     def __init__(self):
-        pass
-
-    def _create_client(self) -> genai.Client:
-        """Create a fresh Gemini client for each request"""
-        return genai.Client(api_key=GEMINI_API_KEY)
-
         # Define JSON schema for inventory items
         self.item_schema = {
             "type": "object",
@@ -39,6 +33,10 @@ class VisionService:
             },
             "required": ["items"]
         }
+
+    def _create_client(self) -> genai.Client:
+        """Create a fresh Gemini client for each request"""
+        return genai.Client(api_key=GEMINI_API_KEY)
 
     def analyze_image(self, image_path: str) -> List[Dict[str, str]]:
         """Analyze image and return structured list of items using JSON schema"""

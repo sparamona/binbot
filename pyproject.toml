@@ -1,0 +1,15 @@
+[project]
+name = "binbot"
+version = "0.1.0"
+description = "BinBot - AI-assisted inventory management system"
+requires-python = ">=3.12"
+dependencies = [
+    "chromadb>=1.1.0",
+    "fastapi>=0.117.1",
+    "google-genai>=1.38.0",
+    "httpx>=0.28.1",
+    "pillow>=11.3.0",
+    "python-multipart>=0.0.20",
+    "requests>=2.32.5",
+    "uvicorn[standard]>=0.36.0",
+]

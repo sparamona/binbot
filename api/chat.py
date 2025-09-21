@@ -96,8 +96,8 @@ async def chat(chat_request: ChatCommandRequest, request: Request):
 
 @router.post("/api/chat/image", response_model=ImageUploadResponse)
 async def chat_image(
-    file: UploadFile = File(...),
-    request: Request = None
+    request: Request,
+    file: UploadFile = File(...)
 ):
     """Upload image, analyze contents, and add to session context"""
     # Get session ID from cookie
@@ -122,12 +122,16 @@ async def chat_image(
     
     try:
         # Store image
+        print(f"📁 Storing image: {file.filename}")
         image_storage = get_image_storage()
         image_id = image_storage.save_image(temp_path, file.filename)
-        
+        print(f"✅ Image stored with ID: {image_id}")
+
         # Analyze image for items
+        print(f"👁️ Analyzing image with vision service...")
         vision_service = get_vision_service()
         analyzed_items_data = vision_service.analyze_image(temp_path)
+        print(f"✅ Vision analysis complete: {len(analyzed_items_data)} items found")
         
         # Convert to ItemInput format
         analyzed_items = []
@@ -139,9 +143,13 @@ async def chat_image(
             )
             analyzed_items.append(item)
         
-        # Add image analysis to session context
-        analysis_summary = f"Image uploaded and analyzed. Found {len(analyzed_items)} items: "
-        analysis_summary += ", ".join([item.name for item in analyzed_items])
+        # Add image analysis to session context with proper image UUID and full details
+        analysis_summary = f"Image uploaded and analyzed (image_id: {image_id}). Found {len(analyzed_items)} items:\n"
+        for item in analyzed_items:
+            analysis_summary += f"- Name: '{item.name}', Description: '{item.description}', Image ID: '{image_id}'\n"
+
+        analysis_summary += f"\nWhen adding these items to a bin, use the exact image_id '{image_id}' and include both name and description for each item."
+
         session_manager.add_message(session_id, "user", f"[Image uploaded: {file.filename}]")
         session_manager.add_message(session_id, "model", analysis_summary)
         
@@ -153,6 +161,9 @@ async def chat_image(
         
     except Exception as e:
         error_msg = f"Image analysis error: {str(e)}"
+        print(f"❌ Image upload error: {error_msg}")
+        import traceback
+        traceback.print_exc()
         session_manager.add_message(session_id, "model", error_msg)
         raise HTTPException(status_code=500, detail=error_msg)
         
