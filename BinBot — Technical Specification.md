@@ -234,13 +234,16 @@ Key behaviors:
   - Split layout: left chat panel with camera button; right panel for current bin contents
   - Responsive design with mobile support and touch-friendly interface
 
-- **frontend/app.js** - JavaScript application with comprehensive camera support
+- **frontend/app.js** - JavaScript application with comprehensive camera and voice support
   - **CameraManager Class**: getUserMedia API integration with permission handling
   - **Live Camera Preview**: Full-screen camera modal with video feed and controls
   - **Photo Capture**: Canvas-based capture with high-quality JPEG output
   - **Camera Selection**: Device switching for front/back cameras on mobile devices
-  - **Chat Integration**: Seamless integration with existing image upload workflow
-  - **Error Handling**: Comprehensive error handling for all camera-related failures
+  - **VoiceManager Class**: Web Speech API integration with microphone permissions
+  - **Conversational Speech**: Real-time speech recognition with automatic message sending
+  - **Voice UI Integration**: Simple microphone toggle button with visual listening feedback
+  - **Chat Integration**: Seamless integration with existing message handling workflow
+  - **Error Handling**: Comprehensive error handling for all camera and voice failures
 
 - **frontend/style.css** - Modern responsive styling
   - Dark theme camera interface with gradient buttons
@@ -757,8 +760,48 @@ When retrieving items from search or list operations:
   - **Mobile Responsive**: Touch-friendly interface optimized for mobile devices
   - **Comprehensive Testing**: Complete test suite with browser compatibility validation
 
+  - **Voice Input Support Implementation**: Complete conversational voice input functionality
+    - VoiceManager class with Web Speech API integration and microphone permissions
+    - Conversational speech recognition with real-time transcript updates
+    - Automatic message sending when user pauses speaking (interim/final results)
+    - Simple toggle UI with microphone button and visual listening feedback
+    - Browser compatibility detection and basic error handling
+    - Comprehensive test suite for voice functionality validation
+
+## 🧪 Voice Input Testing Instructions
+
+### Testing the Voice Input Feature:
+
+1. **Start the BinBot server**: `uvicorn main:app --reload --host 0.0.0.0 --port 8001`
+
+2. **Open the main application**: Navigate to `http://localhost:8001`
+
+3. **Test voice input in the main app**:
+   - Click the 🎤 microphone button next to the camera button
+   - Allow microphone permissions when prompted
+   - Speak naturally - your words will appear in the input field in real-time
+   - When you pause, your message will automatically be sent to the chat
+   - Click the microphone button again to stop voice input
+
+4. **Use the dedicated test page**: Open `test_voice_input.html` in your browser
+   - Tests browser support detection
+   - Tests microphone permission handling
+   - Tests speech recognition with live transcript display
+   - Tests final result processing and error handling
+
+### Browser Compatibility:
+- **Chrome/Edge**: Full support (recommended)
+- **Firefox**: Limited support (may require manual configuration)
+- **Safari**: Partial support (iOS Safari has restrictions)
+- **Mobile browsers**: Variable support depending on device and OS
+
+### Expected Behavior:
+- **Conversational flow**: Speak naturally, pause, and your message is sent automatically
+- **Real-time feedback**: See your words appear in the input field as you speak
+- **Visual indicators**: Microphone button changes color when listening
+- **Error handling**: Clear error messages for permission denied or unsupported browsers
+
 **🚧 Remaining (Task 16):**
-- Voice Input Support (microphone access and speech-to-text)
 - Voice Output Support (text-to-speech and audio feedback)
 - UX Improvements (animations, keyboard shortcuts, settings panel)
 

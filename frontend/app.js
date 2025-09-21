@@ -170,6 +170,179 @@ class CameraManager {
     }
 }
 
+/**
+ * Voice Manager - Handles microphone access and speech recognition
+ */
+class VoiceManager {
+    constructor() {
+        this.recognition = null;
+        this.hasPermission = false;
+        this.isSupported = this.checkSupport();
+        this.isListening = false;
+        this.currentLanguage = 'en-US';
+        this.currentTranscript = '';
+        this.finalTranscript = '';
+        this.onResult = null;
+        this.onFinalResult = null;
+        this.onError = null;
+    }
+
+    /**
+     * Check if voice APIs are supported
+     */
+    checkSupport() {
+        const hasMediaDevices = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+        const hasSpeechRecognition = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+        return hasMediaDevices && hasSpeechRecognition;
+    }
+
+    /**
+     * Get permission status
+     */
+    async getPermissionStatus() {
+        if (!navigator.permissions) {
+            return 'unknown';
+        }
+
+        try {
+            const permission = await navigator.permissions.query({ name: 'microphone' });
+            return permission.state; // 'granted', 'denied', or 'prompt'
+        } catch (error) {
+            return 'unknown';
+        }
+    }
+
+    /**
+     * Request microphone permission
+     */
+    async requestPermission() {
+        if (!this.isSupported) {
+            throw new Error('Voice input is not supported in this browser');
+        }
+
+        try {
+            // Request basic microphone permission
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: true,
+                video: false
+            });
+
+            this.hasPermission = true;
+
+            // Stop the permission test stream
+            stream.getTracks().forEach(track => track.stop());
+
+            return true;
+        } catch (error) {
+            this.hasPermission = false;
+            console.error('Voice permission error:', error);
+            throw new Error('Microphone access denied');
+        }
+    }
+
+    /**
+     * Initialize speech recognition
+     */
+    initializeSpeechRecognition() {
+        if (!this.isSupported) {
+            throw new Error('Speech recognition is not supported');
+        }
+
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        this.recognition = new SpeechRecognition();
+
+        // Configure for conversational input
+        this.recognition.continuous = true;
+        this.recognition.interimResults = true;
+        this.recognition.lang = this.currentLanguage;
+        this.recognition.maxAlternatives = 1;
+
+        // Set up event handlers for conversational flow
+        this.recognition.onresult = (event) => {
+            let interimTranscript = '';
+            let finalTranscript = '';
+
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                const transcript = event.results[i][0].transcript;
+                if (event.results[i].isFinal) {
+                    finalTranscript += transcript;
+                } else {
+                    interimTranscript += transcript;
+                }
+            }
+
+            this.currentTranscript = interimTranscript;
+            this.finalTranscript += finalTranscript;
+
+            // Call result callback if set
+            if (this.onResult) {
+                this.onResult(this.finalTranscript + this.currentTranscript);
+            }
+
+            // If we have final results, trigger the final callback
+            if (finalTranscript && this.onFinalResult) {
+                this.onFinalResult(this.finalTranscript.trim());
+            }
+        };
+
+        this.recognition.onerror = (event) => {
+            console.error('Speech recognition error:', event.error);
+            if (this.onError) {
+                this.onError(event.error);
+            }
+        };
+
+        this.recognition.onend = () => {
+            this.isListening = false;
+        };
+
+        return this.recognition;
+    }
+
+    /**
+     * Start listening for speech
+     */
+    async startListening() {
+        if (!this.hasPermission) {
+            await this.requestPermission();
+        }
+
+        if (!this.recognition) {
+            this.initializeSpeechRecognition();
+        }
+
+        this.isListening = true;
+        this.recognition.start();
+    }
+
+    /**
+     * Stop listening for speech
+     */
+    stopListening() {
+        if (this.recognition && this.isListening) {
+            this.isListening = false;
+            this.recognition.stop();
+        }
+    }
+
+    /**
+     * Reset transcript for new conversation
+     */
+    resetTranscript() {
+        this.currentTranscript = '';
+        this.finalTranscript = '';
+    }
+
+    /**
+     * Set up conversational callbacks
+     */
+    setCallbacks(onResult, onFinalResult, onError) {
+        this.onResult = onResult;
+        this.onFinalResult = onFinalResult;
+        this.onError = onError;
+    }
+}
+
 class BinBotUI {
     constructor() {
         this.sessionId = null;
@@ -179,11 +352,15 @@ class BinBotUI {
         // Initialize camera manager
         this.cameraManager = new CameraManager();
 
+        // Initialize voice manager
+        this.voiceManager = new VoiceManager();
+
         // DOM elements
         this.elements = {
             messageInput: document.getElementById('messageInput'),
             sendBtn: document.getElementById('sendBtn'),
             cameraBtn: document.getElementById('cameraBtn'),
+            voiceBtn: document.getElementById('voiceBtn'),
             imageInput: document.getElementById('imageInput'),
             chatMessages: document.getElementById('chatMessages'),
             binTitle: document.getElementById('binTitle'),
@@ -255,6 +432,11 @@ class BinBotUI {
         // Camera button for image upload
         this.elements.cameraBtn.addEventListener('click', () => {
             this.handleCameraClick();
+        });
+
+        // Voice button for voice input
+        this.elements.voiceBtn.addEventListener('click', () => {
+            this.handleVoiceClick();
         });
 
         // Handle image selection
@@ -844,6 +1026,78 @@ class BinBotUI {
             const switchBtn = modal.querySelector('#cameraSwitchBtn');
             captureBtn.disabled = false;
             switchBtn.disabled = false;
+        }
+    }
+    /**
+     * Handle voice button click - toggle voice input on/off
+     */
+    async handleVoiceClick() {
+        if (!this.voiceManager.isSupported) {
+            this.showError('Voice input is not supported in this browser');
+            return;
+        }
+
+        if (this.voiceManager.isListening) {
+            // Stop listening
+            this.stopVoiceInput();
+        } else {
+            // Start listening
+            await this.startVoiceInput();
+        }
+    }
+
+    /**
+     * Start voice input and set up conversational flow
+     */
+    async startVoiceInput() {
+        try {
+            // Set up callbacks for conversational flow
+            this.voiceManager.setCallbacks(
+                (transcript) => {
+                    // Update input field with current transcript
+                    this.elements.messageInput.value = transcript;
+                },
+                (finalTranscript) => {
+                    // Send final transcript to chat
+                    if (finalTranscript.trim()) {
+                        this.elements.messageInput.value = finalTranscript.trim();
+                        this.handleSendMessage();
+                        this.voiceManager.resetTranscript();
+                    }
+                },
+                (error) => {
+                    console.error('Voice recognition error:', error);
+                    this.showError('Voice recognition failed. Please try again.');
+                    this.stopVoiceInput();
+                }
+            );
+
+            // Start listening
+            await this.voiceManager.startListening();
+
+            // Update UI
+            this.elements.voiceBtn.classList.add('listening');
+            this.elements.voiceBtn.title = 'Stop Voice Input';
+
+        } catch (error) {
+            console.error('Failed to start voice input:', error);
+            this.showError(error.message);
+        }
+    }
+
+    /**
+     * Stop voice input
+     */
+    stopVoiceInput() {
+        this.voiceManager.stopListening();
+
+        // Update UI
+        this.elements.voiceBtn.classList.remove('listening');
+        this.elements.voiceBtn.title = 'Voice Input';
+
+        // Clear any partial transcript
+        if (!this.elements.messageInput.value.trim()) {
+            this.elements.messageInput.value = '';
         }
     }
 

@@ -174,7 +174,7 @@ body {
     color: #9ca3af;
 }
 
-.camera-btn, .send-btn {
+.camera-btn, .voice-btn, .send-btn {
     background: none;
     border: none;
     padding: 0.5rem;
@@ -186,12 +186,21 @@ body {
     justify-content: center;
 }
 
-.camera-btn {
+.camera-btn, .voice-btn {
     font-size: 1.25rem;
 }
 
-.camera-btn:hover {
+.camera-btn:hover, .voice-btn:hover {
     background: #e5e7eb;
+}
+
+.voice-btn.listening {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+.voice-btn.listening:hover {
+    background: #fde68a;
 }
 
 .send-btn {
