@@ -50,46 +50,36 @@ def test_image_analysis_workflow():
         image_id = image_storage.save_image(str(test_image_path), "test_analysis.jpg")
         print(f"✅ Image stored with ID: {image_id[:8]}...")
         
-        # Step 3: Analyze the image
+        # Step 3: Analyze the image using production method
         print("\n🔍 Step 3: Analyze image content...")
-        
-        # Get image data for analysis
-        if hasattr(image_storage, 'get_image_data'):
-            # In-memory mode
+
+        # Get image path for analysis (production method uses file path)
+        if hasattr(image_storage, 'get_image_data') and image_storage.get_image_data(image_id):
+            # In-memory mode - create temporary file for production method
             image_data = image_storage.get_image_data(image_id)
+            import tempfile
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as temp_file:
+                temp_file.write(image_data)
+                temp_image_path = temp_file.name
         else:
             # File mode
-            image_path = image_storage.get_image_path(image_id)
-            with open(image_path, 'rb') as f:
-                image_data = f.read()
-        
-        # Analyze image with vision service
-        analysis_result = vision_service.analyze_image(
-            image_data, 
-            "Identify all distinct objects/items in this image. For each item, provide: name, brief description, and estimated location/position. Focus on items that could be inventory items."
-        )
-        
-        print(f"📋 Analysis result:")
-        print(f"   {analysis_result[:200]}...")
-        
-        # Step 4: Test structured item extraction
-        print("\n📦 Step 4: Extract structured item data...")
-        
-        extraction_prompt = """
-        Analyze this image and extract inventory items as a JSON list. 
-        For each distinct item, provide:
-        {
-            "name": "item name",
-            "description": "brief description including color, material, or distinguishing features"
-        }
-        
-        Only include physical objects that could be inventory items. 
-        Return only the JSON array, no other text.
-        """
-        
-        structured_result = vision_service.analyze_image(image_data, extraction_prompt)
-        print(f"📋 Structured extraction:")
-        print(f"   {structured_result[:300]}...")
+            temp_image_path = image_storage.get_image_path(image_id)
+
+        try:
+            # Use the actual production method
+            analyzed_items = vision_service.analyze_image(temp_image_path)
+
+            print(f"📋 Production analysis result:")
+            print(f"   Found {len(analyzed_items)} items:")
+            for i, item in enumerate(analyzed_items, 1):
+                print(f"   {i}. {item.get('name', 'Unknown')} - {item.get('description', 'No description')}")
+
+        finally:
+            # Clean up temporary file if created
+            if hasattr(image_storage, 'get_image_data') and image_storage.get_image_data(image_id):
+                import os
+                if os.path.exists(temp_image_path):
+                    os.unlink(temp_image_path)
         
         # Step 5: Test adding items from image analysis
         print("\n➕ Step 5: Add items based on analysis...")
@@ -156,24 +146,24 @@ def test_vision_service_basic():
     
     try:
         vision_service = get_vision_service()
-        
-        # Read image data
-        with open(test_image_path, 'rb') as f:
-            image_data = f.read()
-        
-        print(f"📸 Image size: {len(image_data)} bytes")
-        
-        # Test simple analysis
-        result = vision_service.analyze_image(
-            image_data,
-            "What objects do you see in this image? List them briefly."
-        )
-        
-        print(f"📋 Vision analysis result:")
-        print(f"   {result}")
-        
-        # Verify we got a reasonable response
-        if len(result) > 10 and isinstance(result, str):
+
+        print(f"📸 Testing with image: {test_image_path}")
+
+        # Test the production method
+        analyzed_items = vision_service.analyze_image(str(test_image_path))
+
+        print(f"📋 Production vision analysis result:")
+        print(f"   Found {len(analyzed_items)} items:")
+        for i, item in enumerate(analyzed_items, 1):
+            print(f"   {i}. {item.get('name', 'Unknown')} - {item.get('description', 'No description')}")
+
+        # Verify we got reasonable results
+        if len(analyzed_items) > 0 and all(
+            isinstance(item, dict) and
+            'name' in item and
+            'description' in item
+            for item in analyzed_items
+        ):
             print("✅ Vision service working correctly")
             return True
         else:

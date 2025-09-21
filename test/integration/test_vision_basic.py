@@ -33,44 +33,33 @@ def test_basic_vision_analysis():
         # Initialize vision service
         vision_service = get_vision_service()
         print("✅ Vision service initialized")
-        
-        # Read image data
-        with open(test_image_path, 'rb') as f:
-            image_data = f.read()
-        
-        print(f"📸 Image loaded: {len(image_data)} bytes")
-        
-        # Test 1: Simple object identification
-        print("\n🔍 Test 1: Simple object identification")
-        result1 = vision_service.analyze_image(
-            image_data,
-            "What objects do you see in this image? List them briefly."
-        )
-        print(f"📋 Result: {result1}")
-        
-        # Test 2: Inventory-focused analysis
-        print("\n📦 Test 2: Inventory-focused analysis")
-        result2 = vision_service.analyze_image(
-            image_data,
-            "Identify items in this image that could be inventory items. For each item, provide a name and brief description."
-        )
-        print(f"📋 Result: {result2}")
-        
-        # Test 3: Count items
-        print("\n🔢 Test 3: Count items")
-        result3 = vision_service.analyze_image(
-            image_data,
-            "How many distinct objects are visible in this image?"
-        )
-        print(f"📋 Result: {result3}")
-        
-        # Verify we got reasonable responses
-        if all(len(result) > 10 for result in [result1, result2, result3]):
-            print("\n✅ All vision analysis tests passed!")
+
+        print(f"📸 Testing with image: {test_image_path}")
+
+        # Test the actual production method
+        print("\n🔍 Testing production method: analyze_image")
+        analyzed_items = vision_service.analyze_image(str(test_image_path))
+
+        print(f"📋 Production analysis result:")
+        print(f"   Found {len(analyzed_items)} items:")
+        for i, item in enumerate(analyzed_items, 1):
+            print(f"   {i}. {item.get('name', 'Unknown')} - {item.get('description', 'No description')}")
+
+        # Verify we got reasonable results
+        if len(analyzed_items) > 0 and all(
+            isinstance(item, dict) and
+            'name' in item and
+            'description' in item and
+            len(item['name']) > 0 and
+            len(item['description']) > 0
+            for item in analyzed_items
+        ):
+            print("\n✅ Production vision analysis test passed!")
             print("✅ Vision service is working correctly")
             return True
         else:
-            print("\n❌ Some vision analysis tests returned short responses")
+            print("\n❌ Production vision analysis test failed")
+            print(f"   Items: {analyzed_items}")
             return False
             
     except Exception as e:

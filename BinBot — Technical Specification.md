@@ -79,8 +79,8 @@ Key behaviors:
   - **Response**: `{ success: boolean, image_id: string, analyzed_items: [{name: string, description: string}] }`
 
 - **api/images.py** - `analyze_image()`: **POST /api/images/{image_id}/analyze**
-  - **Purpose**: Re-analyze image with optional context
-  - **Request**: `{ context?: string }`
+  - **Purpose**: Re-analyze image
+  - **Request**: `{}`
   - **Response**: `{ success: boolean, items: [{name: string, description: string}] }`
 
 - **api/images.py** - `get_image()`: **GET /images/{image_id}**
@@ -104,11 +104,6 @@ Key behaviors:
   - **Response**: `{ success: boolean }`
   - **Cookie**: Deletes `session_id` cookie
 
-- **api/voice.py** - `transcribe()`: **POST /api/voice/transcribe**
-  - **Purpose**: Speech-to-text ingestion (if used)
-  - **Request**: Form: multipart audio file
-  - **Response**: `{ success: boolean, text: string }`
-
 #### Chat operations
 
 - **api/chat.py** - `chat()`: **POST /api/chat/command**
@@ -119,7 +114,7 @@ Key behaviors:
 
 - **api/chat.py** - `chat_image()`: **POST /api/chat/image**
   - **Purpose**: Upload image, analyze contents, and add to session context
-  - **Request**: Form: multipart file + `{ session_id: string, context?: string }`
+  - **Request**: Form: multipart file + `{ session_id: string }`
   - **Response**: `{ success: boolean, image_id: string, analyzed_items: [{name: string, description: string}] }`
   - **Process**: Uploads image → Vision analysis → Stores in session context for LLM
   
@@ -173,9 +168,9 @@ Key behaviors:
   - `get_gemini_inventory_functions()`: Complete Gemini function schemas.
   - `get_function_by_name(function_name)`: Get specific function schema by name.
 
-- **chat/conversation_manager.py**
+- **session/session_manager.py** (handles conversation management)
   - `get_conversation(session_id)`: Retrieve conversation history and system messages.
-  - `append_message(session_id, role, content)`: Add to conversation context.
+  - `add_message(session_id, role, content)`: Add to conversation context.
   - `set_current_bin(session_id, bin_id)`: Maintain current/last bin context.
 
 ### LLM & Vision
@@ -189,30 +184,35 @@ Key behaviors:
   - `batch_generate_embedding(texts)`: Efficient batched embeddings.
 
 - **llm/vision.py**
-  - `analyze_image_for_items(image_path, context)`: Gemini Vision API to identify items and return structured JSON.
-  - `describe_for_accessibility(image_path)`: Produce accessible descriptions (if needed).
+  - `analyze_image(image_path)`: Gemini Vision API to identify items and return structured JSON.
+  - Single production method with predefined schema for inventory item identification.
 
 ### Database / Vector Store
 - **database/chromadb_client.py**
   - `add_documents_bulk(items)`: Insert multiple items (name, description, bin_id, embedding, timestamps).
-  - `search_documents(query, limit, min_relevance, embedding_service)`: Vector search.
-  - `remove_document(id)`: Delete item by UUID identifier.
+  - `search_documents(query, limit, max_distance)`: Vector search with distance filtering.
+  - `remove_document(item_id)`: Delete item by UUID identifier.
   - `update_item_bin(item_id, new_bin_id)`: Update item's bin location by UUID.
-  - `add_image_to_item(item_id, image_id, set_as_primary)`: Link image to item metadata.
-  - `add_audit_log_entry(entry)`: Append structured audit events.
+  - `get_bin_contents(bin_id)`: Get all items in a specific bin.
+  - `add_image_to_item(item_id, image_id)`: Link image to item metadata.
+  - `add_audit_log_entry(entry)`: Append structured audit events (placeholder).
   - `inventory_collection`: Property exposing underlying ChromaDB collection for updates.
 
 ### Image Storage
 - **storage/image_storage.py**
-  - `save_image(file)`: Persist uploaded image and return image_id.
+  - `save_image(file_path, filename)`: Persist uploaded image and return image_id.
+  - `get_image_path(image_id)`: Resolve file path by image ID.
+  - `get_image_data(image_id)`: Get image bytes (for in-memory mode).
+  - `get_image_metadata(image_id)`: Get image metadata and associations.
   - `update_image_metadata(image_id, metadata)`: Maintain associations (item_id, bin_id).
-  - `get_image_path(image_id, size)`: Resolve path by ID and variant (full/thumbnail).
 
 ### Session Management
 - **session/session_manager.py**
   - `SessionManager`: In-memory session store with TTL and cleanup
   - `new_session()`: Generate UUID session ID, create initial session state
+  - `get_session(session_id)`: Get session data if it exists and hasn't expired
   - `get_conversation(session_id)`: Retrieve conversation history from session
+  - `add_message(session_id, role, content)`: Add message to conversation history
   - `set_current_bin(session_id, bin_id)`: Track the last/active bin for UI context
   - `cleanup_expired_sessions()`: Remove sessions past TTL (30 minutes default)
   - `end_session(session_id)`: Explicit cleanup and finalize
@@ -220,29 +220,22 @@ Key behaviors:
 
 ### Config
 - **config/settings.py**
-  - `load_settings()`: Aggregate runtime configuration (env, YAML).
-  - `get_config()`: Singleton accessor for settings.
-
-- **config/embeddings.py**
-  - `get_embedding_model()`: Choose and configure embedding backend.
-
-- **config/settings.py**
   - Simple environment variable based configuration with sensible defaults.
+  - Constants: `GEMINI_API_KEY`, `DATABASE_PATH`, `IMAGES_PATH`, `API_HOST`, `API_PORT`
+  - Session configuration: `SESSION_TTL_MINUTES` (default 30 minutes)
+  - Storage mode: `STORAGE_MODE` ('memory' for testing, 'persistent' for production)
 
 - **config/embeddings.py**
-  - Basic embedding model configuration.
+  - Embedding dimension constant: `EMBEDDING_DIMENSION = 768`
+  - `get_embedding_service()`: Get global embedding service instance.
 
 ### Frontend
-- **frontend/index.html**
+- **frontend/index.html** (planned)
   - Single-page app shell: left chat + camera button; right panel for current bin contents.
 
-- **frontend/main.html**
-  - Alternative or legacy static page for local/demo usage.
-
 ### Utilities
-- **utils/image_optimizer.py**
-  - `optimize_image(path)`: Resize/compress images per target constraints.
-  - `ensure_max_dimensions(path, w, h)`: Limit size for bandwidth/perf.
+- **utils/** (minimal utilities as needed)
+  - Image resizing handled directly in vision service (llm/vision.py)
 
 ### Data
 - **data/images**
@@ -687,6 +680,39 @@ When retrieving items from search or list operations:
 - **Reliable Parsing**: Direct JSON response from API - no text parsing needed
 - **Simple Implementation**: No fallback mechanisms - structured output only
 - **Item Schema**: Predefined schema for inventory items with name/description fields
+- **Simplified Interface**: Context parameter removed for cleaner, more focused analysis
+
+### Chat Function Integration
+- **Session-bound functions**: Function wrappers automatically bound to user sessions
+- **Automatic execution**: Gemini AUTO mode for seamless function calling
+- **5 core functions**: add_items, search_items, get_bin_contents, move_items, remove_items
+- **Function mapping**: Direct mapping between LLM function names and wrapper methods
+- **Conversation management**: Session-based conversation history with automatic message tracking
+
+### API Endpoints Implementation
+- **Health endpoint**: `api/health.py` - Simple health check returning `{"status": "ok"}`
+- **Session endpoints**: `api/session.py` - Create, retrieve, and end sessions with secure cookie handling
+- **Inventory endpoints**: `api/inventory.py` - Add, remove, move, search, and list items with session binding
+- **Image endpoints**: `api/images.py` - Upload, analyze, and serve images with vision integration
+- **Chat endpoints**: `api/chat.py` - LLM chat with function calling and image analysis
+- **FastAPI app**: `app.py` - Application setup with CORS, router mounting, and static file serving
+- **Cookie security**: HTTP-only, secure, SameSite=strict cookies with 30-minute TTL
+- **Session validation**: Automatic expiration checking and cleanup
+- **Comprehensive testing**: Unit tests for all API endpoints with direct function testing
+
+### Implementation Status
+**✅ Completed (Tasks 1-13):**
+- Core backend infrastructure (config, database, session management)
+- LLM integration with Gemini (client, embeddings, vision)
+- Image storage and processing system
+- Complete API layer (health, session, inventory, images, chat)
+- Function calling system with session binding
+- Comprehensive test suite (unit and integration tests)
+- FastAPI application with CORS and static file serving
+
+**🚧 Remaining (Tasks 14-15):**
+- Frontend interface (HTML/CSS/JS single-page application)
+- Final integration testing and deployment validation
 
 ## Non-Functional Requirements
 

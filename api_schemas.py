@@ -58,7 +58,7 @@ class ChatRequest(BaseModel):
 
 class ImageAnalysisRequest(BaseModel):
     """Request for image analysis"""
-    context: Optional[str] = ""
+    pass
 
 
 # Response Models
