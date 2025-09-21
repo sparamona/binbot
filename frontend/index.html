@@ -1,122 +1,133 @@
+
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BinBot - AI Inventory Assistant</title>
-    <link rel="stylesheet" href="style.css">
-    <!-- Markdown rendering library -->
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BinBot Inventory Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      /* For Webkit-based browsers (Chrome, Safari) */
+      ::-webkit-scrollbar {
+        width: 6px;
+      }
+
+      ::-webkit-scrollbar-track {
+        background: #f1f5f9; /* slate-100 */
+      }
+
+      ::-webkit-scrollbar-thumb {
+        background: #94a3b8; /* slate-400 */
+        border-radius: 3px;
+      }
+
+      ::-webkit-scrollbar-thumb:hover {
+        background: #64748b; /* slate-500 */
+      }
+
+      /* Markdown styling for bot messages */
+      .markdown-content {
+        line-height: 1.5;
+      }
+
+      .markdown-content h1,
+      .markdown-content h2,
+      .markdown-content h3,
+      .markdown-content h4,
+      .markdown-content h5,
+      .markdown-content h6 {
+        margin: 0.5rem 0;
+        font-weight: 600;
+        color: inherit;
+      }
+
+      .markdown-content h2 {
+        font-size: 1.1rem;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+        padding-bottom: 0.25rem;
+      }
+
+      .markdown-content p {
+        margin: 0.5rem 0;
+        white-space: pre-wrap;
+      }
+
+      .markdown-content ul,
+      .markdown-content ol {
+        margin: 0.5rem 0;
+        padding-left: 1.5rem;
+      }
+
+      .markdown-content li {
+        margin: 0.25rem 0;
+      }
+
+      .markdown-content code {
+        background-color: rgba(0, 0, 0, 0.1);
+        padding: 0.125rem 0.25rem;
+        border-radius: 3px;
+        font-family: 'Courier New', monospace;
+        font-size: 0.9rem;
+      }
+
+      .markdown-content pre {
+        background-color: rgba(0, 0, 0, 0.1);
+        padding: 0.75rem;
+        border-radius: 6px;
+        overflow-x: auto;
+        margin: 0.5rem 0;
+      }
+
+      .markdown-content pre code {
+        background-color: transparent;
+        padding: 0;
+      }
+
+      .markdown-content strong {
+        font-weight: 600;
+      }
+
+      .markdown-content table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 0.5rem 0;
+        font-size: 0.9rem;
+      }
+
+      .markdown-content th,
+      .markdown-content td {
+        border: 1px solid rgba(0, 0, 0, 0.2);
+        padding: 0.5rem;
+        text-align: left;
+      }
+
+      .markdown-content th {
+        background-color: rgba(0, 0, 0, 0.05);
+        font-weight: 600;
+      }
+
+      .markdown-content > *:first-child {
+        margin-top: 0;
+      }
+
+      .markdown-content > *:last-child {
+        margin-bottom: 0;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.1.1/",
+    "react": "https://aistudiocdn.com/react@^19.1.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/"
+  }
+}
+</script>
+
 </head>
-<body>
-    <div class="container">
-        <!-- Left Panel: Chat Interface -->
-        <div class="chat-panel">
-            <div class="chat-header">
-                <div class="header-content">
-                    <h1>🤖 BinBot</h1>
-                    <p class="subtitle">AI Inventory Assistant</p>
-                </div>
-                <div class="session-status" id="sessionStatus">
-                    <span class="status-indicator" id="statusIndicator"></span>
-                    <span class="status-text" id="statusText">Connecting...</span>
-                </div>
-            </div>
-            
-            <div class="chat-messages" id="chatMessages">
-                <div class="welcome-message">
-                    <div class="bot-message">
-                        <div class="message-content">
-                            <p>👋 Welcome to BinBot! I'm your AI inventory assistant.</p>
-                            <p>You can:</p>
-                            <ul>
-                                <li>Add items: "add hammer to bin 3"</li>
-                                <li>Search items: "find my electronics"</li>
-                                <li>Check bins: "what's in bin 5"</li>
-                                <li>Upload images: Click the camera button</li>
-                            </ul>
-                            <p>Just type naturally and I'll help you manage your inventory!</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="chat-input-container">
-                <div class="chat-input">
-                    <input 
-                        type="text" 
-                        id="messageInput" 
-                        placeholder="Ask me about your inventory..."
-                        autocomplete="off"
-                        maxlength="500"
-                    >
-                    <button id="cameraBtn" class="camera-btn" title="Upload Image">
-                        📷
-                    </button>
-                    <button id="voiceBtn" class="voice-btn" title="Voice Input">
-                        🎤
-                    </button>
-                    <button id="sendBtn" class="send-btn" title="Send Message">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="22" y1="2" x2="11" y2="13"></line>
-                            <polygon points="22,2 15,22 11,13 2,9"></polygon>
-                        </svg>
-                    </button>
-                </div>
-                <input type="file" id="imageInput" accept="image/*" style="display: none;">
-                <div class="input-hint">
-                    Press Enter to send • Click 📷 to upload image • Click 🎤 for voice input
-                </div>
-            </div>
-        </div>
-
-        <!-- Right Panel: Bin Contents -->
-        <div class="bin-panel">
-            <div class="bin-header">
-                <div class="bin-title-section">
-                    <h2 id="binTitle">No bin selected</h2>
-                    <div class="bin-meta">
-                        <span id="itemCount">0 items</span>
-                        <span id="lastUpdated"></span>
-                    </div>
-                </div>
-                <button id="refreshBtn" class="refresh-btn" title="Refresh bin contents">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="23 4 23 10 17 10"></polyline>
-                        <polyline points="1 20 1 14 7 14"></polyline>
-                        <path d="m3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-                    </svg>
-                </button>
-            </div>
-            
-            <div class="bin-contents" id="binContents">
-                <div class="empty-bin-message">
-                    <div class="empty-icon">📦</div>
-                    <p>No bin selected</p>
-                    <p class="empty-hint">Ask me about a bin to see its contents here</p>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Loading Overlay -->
-    <div class="loading-overlay" id="loadingOverlay">
-        <div class="loading-spinner"></div>
-        <p class="loading-text">Processing...</p>
-    </div>
-
-    <!-- Error Toast -->
-    <div class="error-toast" id="errorToast">
-        <div class="error-content">
-            <span class="error-icon">⚠️</span>
-            <span class="error-message" id="errorMessage"></span>
-            <button class="error-close" id="errorClose">×</button>
-        </div>
-    </div>
-
-    <script src="app.js?v=2"></script>
-</body>
+  <body class="bg-slate-50">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
 </html>

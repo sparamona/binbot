@@ -40,10 +40,10 @@ def create_app() -> FastAPI:
     app.include_router(images_router, tags=["Images"])
     app.include_router(chat_router, tags=["Chat"])
     
-    # Serve static files (frontend)
-    frontend_path = Path("frontend")
-    if frontend_path.exists():
-        app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
+    # Serve static files (React build)
+    build_path = Path("frontend/dist")
+    if build_path.exists():
+        app.mount("/", StaticFiles(directory="frontend/dist", html=True), name="frontend")
     
     return app
 

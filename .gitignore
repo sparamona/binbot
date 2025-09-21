@@ -64,3 +64,24 @@ chromadb/
 # Temporary files
 *.tmp
 *.temp
+
+# React/Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.yarn-integrity
+.pnpm-debug.log*
+.pnpm-store/
+
+# React build output
+frontend/dist/
+frontend/build/
+
+# React development
+.eslintcache
+.stylelintcache
+
+# Import directory (temporary UI files)
+IMPORT/
