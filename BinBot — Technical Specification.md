@@ -20,7 +20,7 @@ Key behaviors:
 
 ## Architecture
 
-- **Frontend**: Static HTML page with a simple split layout: left chat (with camera button) and right bin contents.
+- **Frontend**: Static HTML page with a simple split layout: left chat (with camera button) and right bin contents. Includes comprehensive camera support with live preview, photo capture, and device selection.
 - **Backend API**: FastAPI app exposing REST endpoints for inventory operations, images, and chat.
 - **Chat Layer**: Command parsing, function selection and dispatching (Gemini tool/function calling).
 - **LLM Layer**: Text LLM client, embeddings service, and vision utilities.
@@ -230,8 +230,22 @@ Key behaviors:
   - `get_embedding_service()`: Get global embedding service instance.
 
 ### Frontend
-- **frontend/index.html** (planned)
-  - Single-page app shell: left chat + camera button; right panel for current bin contents.
+- **frontend/index.html** - Single-page web application
+  - Split layout: left chat panel with camera button; right panel for current bin contents
+  - Responsive design with mobile support and touch-friendly interface
+
+- **frontend/app.js** - JavaScript application with comprehensive camera support
+  - **CameraManager Class**: getUserMedia API integration with permission handling
+  - **Live Camera Preview**: Full-screen camera modal with video feed and controls
+  - **Photo Capture**: Canvas-based capture with high-quality JPEG output
+  - **Camera Selection**: Device switching for front/back cameras on mobile devices
+  - **Chat Integration**: Seamless integration with existing image upload workflow
+  - **Error Handling**: Comprehensive error handling for all camera-related failures
+
+- **frontend/style.css** - Modern responsive styling
+  - Dark theme camera interface with gradient buttons
+  - Mobile-optimized camera controls and responsive modal design
+  - Consistent styling across all UI components
 
 ### Utilities
 - **utils/** (minimal utilities as needed)
@@ -675,6 +689,15 @@ When retrieving items from search or list operations:
 - **Real image testing**: Uses `test/coaster_pen_mouse.jpg` for consistent validation
 - **Vision service methods**: `analyze_image()` for general analysis, `analyze_image_for_items()` for structured extraction
 
+### Camera Support Testing
+- **Complete camera workflow**: `test_camera_complete_workflow.html` - Comprehensive camera functionality validation
+- **Camera permissions**: `test_camera_permissions.html` - getUserMedia API and permission handling
+- **Live camera preview**: `test_camera_preview.html` - Video feed and capture controls
+- **Camera-first behavior**: `test_camera_first_behavior.html` - Direct camera access validation
+- **PNG upload fix**: `test_png_upload_complete.html` - RGBA to RGB conversion testing
+- **Browser compatibility**: Tests across Chrome, Firefox, Safari, and mobile browsers
+- **Mobile responsiveness**: Touch interface and front/back camera switching validation
+
 ### Structured Vision Output
 - **JSON Schema Support**: Uses Gemini's `response_mime_type="application/json"` with defined schemas
 - **Reliable Parsing**: Direct JSON response from API - no text parsing needed
@@ -721,14 +744,29 @@ When retrieving items from search or list operations:
   - Interactive help system and error handling
   - Configurable API server URL
 
-**🚧 Remaining (Task 15):**
-- Final integration testing and deployment validation
+**✅ Task 15 Complete:**
+- **Web Frontend with Camera Support**: `frontend/` - Complete web application
+  - **Camera Support Implementation**: Full camera functionality with live preview and capture
+    - Camera permissions handling with getUserMedia API
+    - Live camera preview with full-screen modal interface
+    - Canvas-based photo capture with high-quality JPEG output
+    - Camera device selection and switching (front/back cameras)
+    - Seamless integration with existing chat and upload workflow
+  - **PNG Upload Fix**: RGBA to RGB conversion for PNG files with transparency
+  - **Camera-First UX**: Direct camera access with file upload as secondary option
+  - **Mobile Responsive**: Touch-friendly interface optimized for mobile devices
+  - **Comprehensive Testing**: Complete test suite with browser compatibility validation
+
+**🚧 Remaining (Task 16):**
+- Voice Input Support (microphone access and speech-to-text)
+- Voice Output Support (text-to-speech and audio feedback)
+- UX Improvements (animations, keyboard shortcuts, settings panel)
 
 ## Non-Functional Requirements
 
 - **Performance**: Use bulk adds and batched embeddings; avoid fetching all items where not needed.
 - **Reliability**: Audit logged mutations; clear error messaging in NLP formatting for the UI.
-- **UX**: Single-page UI; always show last active/current bin; simple chat + camera button.
+- **UX**: Single-page UI; always show last active/current bin; camera-first interface with live preview and capture.
 - **Deployability**: Dockerized; compose file for local dev; environment-based config. 
 
 ---
