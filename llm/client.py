@@ -10,7 +10,7 @@ from config.settings import GEMINI_API_KEY
 from llm.prompts import SYSTEM_INSTRUCTIONS
 
 # Model configuration
-GEMINI_MODEL = "gemini-2.5-flash-lite"
+GEMINI_MODEL = "gemini-2.5-flash"
 
 
 class GeminiClient:
@@ -57,9 +57,9 @@ class GeminiClient:
                 tool_config=types.ToolConfig(
                     function_calling_config=types.FunctionCallingConfig(
                         mode='AUTO'
-                    )
-                ),
-                system_instruction=SYSTEM_INSTRUCTIONS
+                    )                ),
+                system_instruction=SYSTEM_INSTRUCTIONS,
+                temperature=0.0
             )
 
             # Send request with full context

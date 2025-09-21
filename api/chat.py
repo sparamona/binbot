@@ -51,7 +51,7 @@ async def chat(chat_request: ChatCommandRequest, request: Request):
         raise HTTPException(status_code=404, detail="Session not found or expired")
 
     # Add user message to conversation
-    session_manager.add_message(session_id, "user", chat_request.message + "\n\n Remember to abide by system instructions.  Always use the tools provided whenever possible.  Never rely on your memory for bin contents.  ALWAYS use get_bin_contents to retrieve the contents of a bin.")
+    session_manager.add_message(session_id, "user", chat_request.message + "\n\n The contents of any bin change at any time without your knowledge.  Remember to abide by system instructions.  Always use the tools provided whenever possible.  Never rely on your memory for bin contents.  ALWAYS use get_bin_contents to retrieve the contents of a bin.")
     
     # Get conversation history
     conversation = session_manager.get_conversation(session_id)
