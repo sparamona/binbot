@@ -49,10 +49,23 @@ class VisionService:
             new_size = (int(image.size[0] * ratio), int(image.size[1] * ratio))
             image = image.resize(new_size, Image.Resampling.LANCZOS)
 
-        # Convert PIL Image to bytes for the API
+        # Convert PIL Image to bytes for the API (with RGBA->RGB conversion)
         import io
         img_byte_arr = io.BytesIO()
-        image.save(img_byte_arr, format='JPEG')
+
+        # Convert RGBA to RGB if necessary (PNG with transparency -> JPEG)
+        if image.mode in ('RGBA', 'LA', 'P'):
+            # Create a white background for transparent images
+            background = Image.new('RGB', image.size, (255, 255, 255))
+            if image.mode == 'P':
+                image = image.convert('RGBA')
+            background.paste(image, mask=image.split()[-1] if image.mode in ('RGBA', 'LA') else None)
+            image = background
+        elif image.mode not in ('RGB', 'L'):
+            # Convert any other modes to RGB
+            image = image.convert('RGB')
+
+        image.save(img_byte_arr, format='JPEG', quality=95)
         img_bytes = img_byte_arr.getvalue()
 
         # Create prompt for structured output

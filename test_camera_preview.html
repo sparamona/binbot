@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera Preview Test</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 20px; 
+            background: #f5f5f5;
+        }
+        .test-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        button {
+            background: #4f46e5;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #3730a3; }
+        button:disabled { background: #9ca3af; cursor: not-allowed; }
+        .result {
+            background: #f8f9fa;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        .success { border-left: 4px solid #10b981; }
+        .error { border-left: 4px solid #ef4444; }
+        .info { border-left: 4px solid #3b82f6; }
+        .preview-container {
+            margin: 20px 0;
+            text-align: center;
+        }
+        #testPreview {
+            max-width: 100%;
+            height: 300px;
+            background: #000;
+            border-radius: 10px;
+            object-fit: cover;
+        }
+        .controls {
+            margin: 10px 0;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .device-list {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .device-item {
+            padding: 5px 0;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .device-item:last-child {
+            border-bottom: none;
+        }
+        .current-device {
+            font-weight: bold;
+            color: #059669;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>📷 Camera Preview Test</h1>
+        <p>This page tests the live camera preview functionality implemented in BinBot.</p>
+        
+        <div class="test-section">
+            <h2>1. Camera Setup</h2>
+            <button onclick="setupCamera()" id="setupBtn">Setup Camera</button>
+            <button onclick="stopCamera()" id="stopBtn" disabled>Stop Camera</button>
+            <div id="setupResult" class="result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h2>2. Live Preview</h2>
+            <div class="preview-container">
+                <video id="testPreview" autoplay playsinline muted style="display: none;"></video>
+                <div id="previewPlaceholder" style="display: block; padding: 100px; background: #e5e7eb; border-radius: 10px; color: #6b7280;">
+                    📷 Camera preview will appear here
+                </div>
+            </div>
+            <div class="controls">
+                <button onclick="capturePhoto()" id="captureBtn" disabled>📷 Capture Photo</button>
+                <button onclick="switchCamera()" id="switchBtn" disabled>🔄 Switch Camera</button>
+                <button onclick="toggleMirror()" id="mirrorBtn" disabled>🪞 Toggle Mirror</button>
+            </div>
+            <div id="previewResult" class="result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h2>3. Available Cameras</h2>
+            <button onclick="listCameras()">List Available Cameras</button>
+            <div id="cameraList" class="device-list" style="display: none;"></div>
+            <div id="devicesResult" class="result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h2>4. Captured Photos</h2>
+            <div id="capturedPhotos" style="display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0;"></div>
+            <div id="captureResult" class="result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h2>5. Test Results</h2>
+            <div id="testSummary" class="result info">
+                <strong>Test Summary:</strong>
+                • Camera Support: <span id="supportStatus">Not tested</span>
+                • Permission Status: <span id="permissionStatus">Not tested</span>
+                • Preview Status: <span id="previewStatus">Not tested</span>
+                • Capture Status: <span id="captureStatus">Not tested</span>
+                • Device Count: <span id="deviceCount">Not tested</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let cameraManager;
+        let currentStream = null;
+        let videoElement;
+        let captureCount = 0;
+        let isMirrored = false;
+        
+        // Initialize when page loads
+        window.onload = function() {
+            videoElement = document.getElementById('testPreview');
+            
+            // Simple camera manager for testing
+            cameraManager = {
+                stream: null,
+                hasPermission: false,
+                isSupported: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
+                devices: [],
+                currentDeviceId: null,
+                
+                async getPermissionStatus() {
+                    if (!navigator.permissions) return 'unknown';
+                    try {
+                        const permission = await navigator.permissions.query({ name: 'camera' });
+                        return permission.state;
+                    } catch (error) {
+                        return 'unknown';
+                    }
+                },
+                
+                async requestPermission() {
+                    if (!this.isSupported) {
+                        throw new Error('Camera is not supported in this browser');
+                    }
+                    
+                    try {
+                        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                        this.hasPermission = true;
+                        stream.getTracks().forEach(track => track.stop());
+                        await this.getDevices();
+                        return true;
+                    } catch (error) {
+                        this.hasPermission = false;
+                        throw this.handlePermissionError(error);
+                    }
+                },
+                
+                async getDevices() {
+                    try {
+                        const devices = await navigator.mediaDevices.enumerateDevices();
+                        this.devices = devices.filter(device => device.kind === 'videoinput');
+                        if (this.devices.length > 0 && !this.currentDeviceId) {
+                            const backCamera = this.devices.find(device => 
+                                device.label.toLowerCase().includes('back') || 
+                                device.label.toLowerCase().includes('rear')
+                            );
+                            this.currentDeviceId = backCamera ? backCamera.deviceId : this.devices[0].deviceId;
+                        }
+                        return this.devices;
+                    } catch (error) {
+                        console.error('Error getting camera devices:', error);
+                        return [];
+                    }
+                },
+                
+                async startStream(deviceId = null) {
+                    if (!this.hasPermission) {
+                        await this.requestPermission();
+                    }
+                    
+                    try {
+                        const constraints = {
+                            video: {
+                                deviceId: deviceId || this.currentDeviceId ? 
+                                    { exact: deviceId || this.currentDeviceId } : true,
+                                width: { ideal: 1280 },
+                                height: { ideal: 720 }
+                            },
+                            audio: false
+                        };
+                        
+                        this.stream = await navigator.mediaDevices.getUserMedia(constraints);
+                        return this.stream;
+                    } catch (error) {
+                        throw this.handleStreamError(error);
+                    }
+                },
+                
+                stopStream() {
+                    if (this.stream) {
+                        this.stream.getTracks().forEach(track => track.stop());
+                        this.stream = null;
+                    }
+                },
+                
+                async switchDevice(deviceId) {
+                    this.stopStream();
+                    this.currentDeviceId = deviceId;
+                    return await this.startStream(deviceId);
+                },
+                
+                handlePermissionError(error) {
+                    switch (error.name) {
+                        case 'NotAllowedError':
+                            return new Error('Camera access denied. Please allow camera access and try again.');
+                        case 'NotFoundError':
+                            return new Error('No camera found on this device.');
+                        case 'NotSupportedError':
+                            return new Error('Camera is not supported in this browser.');
+                        case 'NotReadableError':
+                            return new Error('Camera is already in use by another application.');
+                        default:
+                            return new Error(`Camera error: ${error.message}`);
+                    }
+                },
+                
+                handleStreamError(error) {
+                    switch (error.name) {
+                        case 'OverconstrainedError':
+                            return new Error('Camera constraints could not be satisfied.');
+                        case 'NotReadableError':
+                            return new Error('Camera is already in use.');
+                        default:
+                            return this.handlePermissionError(error);
+                    }
+                }
+            };
+            
+            updateTestSummary();
+        };
+        
+        async function setupCamera() {
+            const result = document.getElementById('setupResult');
+            const setupBtn = document.getElementById('setupBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            
+            try {
+                setupBtn.disabled = true;
+                result.className = 'result info';
+                result.textContent = 'Setting up camera...';
+                
+                // Start camera stream
+                currentStream = await cameraManager.startStream();
+                
+                // Show video preview
+                videoElement.srcObject = currentStream;
+                videoElement.style.display = 'block';
+                document.getElementById('previewPlaceholder').style.display = 'none';
+                
+                // Enable controls
+                document.getElementById('captureBtn').disabled = false;
+                document.getElementById('switchBtn').disabled = cameraManager.devices.length <= 1;
+                document.getElementById('mirrorBtn').disabled = false;
+                stopBtn.disabled = false;
+                
+                result.className = 'result success';
+                result.textContent = `Camera setup successful! ✅
+Resolution: ${videoElement.videoWidth}x${videoElement.videoHeight}
+Device: ${cameraManager.currentDeviceId ? cameraManager.currentDeviceId.substring(0, 20) + '...' : 'Default'}
+Available cameras: ${cameraManager.devices.length}`;
+                
+                updateTestSummary();
+                
+            } catch (error) {
+                setupBtn.disabled = false;
+                result.className = 'result error';
+                result.textContent = `Camera setup failed: ${error.message}`;
+                updateTestSummary();
+            }
+        }
+        
+        function stopCamera() {
+            cameraManager.stopStream();
+            currentStream = null;
+            
+            videoElement.style.display = 'none';
+            document.getElementById('previewPlaceholder').style.display = 'block';
+            
+            // Disable controls
+            document.getElementById('setupBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            document.getElementById('captureBtn').disabled = true;
+            document.getElementById('switchBtn').disabled = true;
+            document.getElementById('mirrorBtn').disabled = true;
+            
+            const result = document.getElementById('setupResult');
+            result.className = 'result info';
+            result.textContent = 'Camera stopped.';
+            
+            updateTestSummary();
+        }
+        
+        function capturePhoto() {
+            if (!currentStream) return;
+            
+            try {
+                // Create canvas to capture frame
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                
+                // Set canvas dimensions
+                canvas.width = videoElement.videoWidth;
+                canvas.height = videoElement.videoHeight;
+                
+                // Draw video frame to canvas
+                context.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+                
+                // Create image element to display captured photo
+                const img = document.createElement('img');
+                img.src = canvas.toDataURL('image/jpeg', 0.9);
+                img.style.width = '150px';
+                img.style.height = '100px';
+                img.style.objectFit = 'cover';
+                img.style.borderRadius = '5px';
+                img.style.border = '2px solid #10b981';
+                img.title = `Capture ${++captureCount}`;
+                
+                document.getElementById('capturedPhotos').appendChild(img);
+                
+                const result = document.getElementById('captureResult');
+                result.className = 'result success';
+                result.textContent = `Photo captured successfully! ✅ (${captureCount} total)
+Resolution: ${canvas.width}x${canvas.height}
+Size: ${Math.round(canvas.toDataURL().length / 1024)}KB`;
+                
+                updateTestSummary();
+                
+            } catch (error) {
+                const result = document.getElementById('captureResult');
+                result.className = 'result error';
+                result.textContent = `Capture failed: ${error.message}`;
+            }
+        }
+        
+        async function switchCamera() {
+            if (!currentStream || cameraManager.devices.length <= 1) return;
+            
+            try {
+                const currentIndex = cameraManager.devices.findIndex(
+                    device => device.deviceId === cameraManager.currentDeviceId
+                );
+                const nextIndex = (currentIndex + 1) % cameraManager.devices.length;
+                const nextDevice = cameraManager.devices[nextIndex];
+                
+                const result = document.getElementById('previewResult');
+                result.className = 'result info';
+                result.textContent = 'Switching camera...';
+                
+                currentStream = await cameraManager.switchDevice(nextDevice.deviceId);
+                videoElement.srcObject = currentStream;
+                
+                result.className = 'result success';
+                result.textContent = `Switched to: ${nextDevice.label || 'Unknown Camera'}`;
+                
+            } catch (error) {
+                const result = document.getElementById('previewResult');
+                result.className = 'result error';
+                result.textContent = `Switch failed: ${error.message}`;
+            }
+        }
+        
+        function toggleMirror() {
+            isMirrored = !isMirrored;
+            videoElement.style.transform = isMirrored ? 'scaleX(-1)' : 'scaleX(1)';
+            
+            const result = document.getElementById('previewResult');
+            result.className = 'result info';
+            result.textContent = `Mirror mode: ${isMirrored ? 'ON' : 'OFF'}`;
+        }
+        
+        async function listCameras() {
+            const result = document.getElementById('devicesResult');
+            const listContainer = document.getElementById('cameraList');
+            
+            try {
+                await cameraManager.getDevices();
+                
+                listContainer.innerHTML = '';
+                cameraManager.devices.forEach((device, index) => {
+                    const deviceDiv = document.createElement('div');
+                    deviceDiv.className = 'device-item';
+                    if (device.deviceId === cameraManager.currentDeviceId) {
+                        deviceDiv.className += ' current-device';
+                    }
+                    deviceDiv.innerHTML = `
+                        <strong>${index + 1}. ${device.label || 'Unknown Camera'}</strong><br>
+                        <small>ID: ${device.deviceId}</small>
+                    `;
+                    listContainer.appendChild(deviceDiv);
+                });
+                
+                listContainer.style.display = 'block';
+                
+                result.className = 'result success';
+                result.textContent = `Found ${cameraManager.devices.length} camera device(s) ✅`;
+                
+                updateTestSummary();
+                
+            } catch (error) {
+                result.className = 'result error';
+                result.textContent = `Failed to list cameras: ${error.message}`;
+            }
+        }
+        
+        function updateTestSummary() {
+            document.getElementById('supportStatus').textContent = cameraManager.isSupported ? '✅ Supported' : '❌ Not Supported';
+            document.getElementById('permissionStatus').textContent = cameraManager.hasPermission ? '✅ Granted' : '❌ Not Granted';
+            document.getElementById('previewStatus').textContent = currentStream ? '✅ Active' : '❌ Inactive';
+            document.getElementById('captureStatus').textContent = captureCount > 0 ? `✅ ${captureCount} captured` : '❌ None';
+            document.getElementById('deviceCount').textContent = cameraManager.devices.length > 0 ? `✅ ${cameraManager.devices.length} found` : '❌ None';
+        }
+    </script>
+</body>
+</html>

@@ -3,12 +3,182 @@
  * Handles session management, chat interface, and bin contents display
  */
 
+/**
+ * Camera Manager - Handles camera access, permissions, and capture
+ */
+class CameraManager {
+    constructor() {
+        this.stream = null;
+        this.hasPermission = false;
+        this.isSupported = this.checkSupport();
+        this.devices = [];
+        this.currentDeviceId = null;
+    }
+
+    /**
+     * Check if camera APIs are supported
+     */
+    checkSupport() {
+        return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+    }
+
+    /**
+     * Request camera permission and get available devices
+     */
+    async requestPermission() {
+        if (!this.isSupported) {
+            throw new Error('Camera is not supported in this browser');
+        }
+
+        try {
+            // Request basic camera permission
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: true,
+                audio: false
+            });
+
+            this.hasPermission = true;
+
+            // Stop the permission test stream
+            stream.getTracks().forEach(track => track.stop());
+
+            // Get available camera devices
+            await this.getDevices();
+
+            return true;
+        } catch (error) {
+            this.hasPermission = false;
+            throw this.handlePermissionError(error);
+        }
+    }
+
+    /**
+     * Get available camera devices
+     */
+    async getDevices() {
+        try {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            this.devices = devices.filter(device => device.kind === 'videoinput');
+
+            // Set default device (prefer back camera on mobile)
+            if (this.devices.length > 0 && !this.currentDeviceId) {
+                const backCamera = this.devices.find(device =>
+                    device.label.toLowerCase().includes('back') ||
+                    device.label.toLowerCase().includes('rear')
+                );
+                this.currentDeviceId = backCamera ? backCamera.deviceId : this.devices[0].deviceId;
+            }
+
+            return this.devices;
+        } catch (error) {
+            console.error('Error getting camera devices:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Start camera stream
+     */
+    async startStream(deviceId = null) {
+        if (!this.hasPermission) {
+            await this.requestPermission();
+        }
+
+        try {
+            const constraints = {
+                video: {
+                    deviceId: deviceId || this.currentDeviceId ?
+                        { exact: deviceId || this.currentDeviceId } : true,
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                },
+                audio: false
+            };
+
+            this.stream = await navigator.mediaDevices.getUserMedia(constraints);
+            return this.stream;
+        } catch (error) {
+            throw this.handleStreamError(error);
+        }
+    }
+
+    /**
+     * Stop camera stream
+     */
+    stopStream() {
+        if (this.stream) {
+            this.stream.getTracks().forEach(track => track.stop());
+            this.stream = null;
+        }
+    }
+
+    /**
+     * Switch to different camera device
+     */
+    async switchDevice(deviceId) {
+        this.stopStream();
+        this.currentDeviceId = deviceId;
+        return await this.startStream(deviceId);
+    }
+
+    /**
+     * Handle permission errors
+     */
+    handlePermissionError(error) {
+        switch (error.name) {
+            case 'NotAllowedError':
+                return new Error('Camera access denied. Please allow camera access and try again.');
+            case 'NotFoundError':
+                return new Error('No camera found on this device.');
+            case 'NotSupportedError':
+                return new Error('Camera is not supported in this browser.');
+            case 'NotReadableError':
+                return new Error('Camera is already in use by another application.');
+            default:
+                return new Error(`Camera error: ${error.message}`);
+        }
+    }
+
+    /**
+     * Handle stream errors
+     */
+    handleStreamError(error) {
+        switch (error.name) {
+            case 'OverconstrainedError':
+                return new Error('Camera constraints could not be satisfied.');
+            case 'NotReadableError':
+                return new Error('Camera is already in use.');
+            default:
+                return this.handlePermissionError(error);
+        }
+    }
+
+    /**
+     * Get permission status
+     */
+    async getPermissionStatus() {
+        if (!navigator.permissions) {
+            return 'unknown';
+        }
+
+        try {
+            const permission = await navigator.permissions.query({ name: 'camera' });
+            return permission.state; // 'granted', 'denied', or 'prompt'
+        } catch (error) {
+            return 'unknown';
+        }
+    }
+}
+
 class BinBotUI {
     constructor() {
         this.sessionId = null;
         this.currentBin = null;
         this.apiBase = window.location.origin;
-        
+
+        // Initialize camera manager
+        this.cameraManager = new CameraManager();
+
         // DOM elements
         this.elements = {
             messageInput: document.getElementById('messageInput'),
@@ -28,13 +198,13 @@ class BinBotUI {
             errorMessage: document.getElementById('errorMessage'),
             errorClose: document.getElementById('errorClose')
         };
-        
+
         this.init();
     }
 
     async init() {
         console.log('🤖 Initializing BinBot UI...');
-        
+
         try {
             await this.createSession();
             this.setupEventListeners();
@@ -49,21 +219,21 @@ class BinBotUI {
 
     async createSession() {
         console.log('🔄 Creating new session...');
-        
+
         try {
             const response = await fetch(`${this.apiBase}/api/session`, {
                 method: 'POST',
                 credentials: 'include'
             });
-            
+
             if (!response.ok) {
                 throw new Error(`Session creation failed: ${response.status}`);
             }
-            
+
             const data = await response.json();
             this.sessionId = data.session_id;
             console.log('✅ Session created:', this.sessionId);
-            
+
         } catch (error) {
             console.error('❌ Session creation failed:', error);
             throw error;
@@ -73,7 +243,7 @@ class BinBotUI {
     setupEventListeners() {
         // Send message on button click
         this.elements.sendBtn.addEventListener('click', () => this.handleSendMessage());
-        
+
         // Send message on Enter key
         this.elements.messageInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -81,31 +251,31 @@ class BinBotUI {
                 this.handleSendMessage();
             }
         });
-        
+
         // Camera button for image upload
         this.elements.cameraBtn.addEventListener('click', () => {
-            this.elements.imageInput.click();
+            this.handleCameraClick();
         });
-        
+
         // Handle image selection
         this.elements.imageInput.addEventListener('change', (e) => {
             if (e.target.files.length > 0) {
                 this.handleImageUpload(e.target.files[0]);
             }
         });
-        
+
         // Refresh bin contents
         this.elements.refreshBtn.addEventListener('click', () => {
             if (this.currentBin) {
                 this.refreshBinContents(this.currentBin);
             }
         });
-        
+
         // Close error toast
         this.elements.errorClose.addEventListener('click', () => {
             this.hideError();
         });
-        
+
         // Auto-hide error toast after 5 seconds
         let errorTimeout;
         this.elements.errorToast.addEventListener('transitionend', () => {
@@ -119,14 +289,14 @@ class BinBotUI {
     async handleSendMessage() {
         const message = this.elements.messageInput.value.trim();
         if (!message) return;
-        
+
         // Clear input and disable send button
         this.elements.messageInput.value = '';
         this.elements.sendBtn.disabled = true;
-        
+
         // Add user message to chat
         this.addMessage(message, true);
-        
+
         try {
             // Show typing indicator instead of loading overlay for better UX
             this.showTypingIndicator();
@@ -181,36 +351,36 @@ class BinBotUI {
             this.showError('Please select a valid image file.');
             return;
         }
-        
+
         if (file.size > 10 * 1024 * 1024) { // 10MB limit
             this.showError('Image file is too large. Please select a file under 10MB.');
             return;
         }
-        
+
         try {
             this.showLoading('Analyzing image...');
-            
+
             const formData = new FormData();
             formData.append('file', file);
-            
+
             const response = await fetch(`${this.apiBase}/api/chat/image`, {
                 method: 'POST',
                 credentials: 'include',
                 body: formData
             });
-            
+
             if (!response.ok) {
                 throw new Error(`Image upload failed: ${response.status}`);
             }
-            
+
             const data = await response.json();
-            
+
             // Add image upload message to chat
             this.addImageMessage(file.name, data.analyzed_items);
 
             // Note: Image upload doesn't change current_bin, so no bin update needed
             // The user will need to explicitly add items to a bin via chat
-            
+
         } catch (error) {
             console.error('❌ Image upload failed:', error);
             this.showError('Failed to analyze image. Please try again.');
@@ -218,6 +388,462 @@ class BinBotUI {
             this.hideLoading();
             // Clear the file input
             this.elements.imageInput.value = '';
+        }
+    }
+    /**
+     * Handle camera button click - default to camera capture with fallback options
+     */
+    async handleCameraClick() {
+        // Check if camera is supported
+        if (!this.cameraManager.isSupported) {
+            // No camera support - go directly to file upload
+            this.elements.imageInput.click();
+            return;
+        }
+
+        // Check current permission status
+        const permissionStatus = await this.cameraManager.getPermissionStatus();
+
+        if (permissionStatus === 'denied') {
+            this.showCameraPermissionDenied();
+            return;
+        }
+
+        // Default to camera capture - try to open camera directly
+        try {
+            await this.openCameraCapture();
+        } catch (error) {
+            // If camera fails, show fallback options
+            console.warn('Camera failed to open, showing fallback options:', error);
+            this.showCameraFallbackOptions(error.message);
+        }
+    }
+
+    /**
+     * Show camera options modal
+     */
+    showCameraOptions(options) {
+        const modal = document.createElement('div');
+        modal.className = 'camera-modal';
+        modal.innerHTML = `
+            <div class="camera-modal-content">
+                <div class="camera-modal-header">
+                    <h3>📷 Add Image</h3>
+                    <button class="camera-modal-close">&times;</button>
+                </div>
+                <div class="camera-modal-body">
+                    ${options.includes('file') ? `
+                        <button class="camera-option-btn" data-action="file">
+                            📁 Choose from Files
+                        </button>
+                    ` : ''}
+                    ${options.includes('camera') ? `
+                        <button class="camera-option-btn" data-action="camera">
+                            📷 Take Photo
+                        </button>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+
+        // Add event listeners
+        modal.querySelector('.camera-modal-close').addEventListener('click', () => {
+            document.body.removeChild(modal);
+        });
+
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                document.body.removeChild(modal);
+            }
+        });
+
+        modal.querySelectorAll('.camera-option-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const action = e.target.dataset.action;
+                document.body.removeChild(modal);
+
+                if (action === 'file') {
+                    this.elements.imageInput.click();
+                } else if (action === 'camera') {
+                    this.openCameraCapture();
+                }
+            });
+        });
+
+        document.body.appendChild(modal);
+    }
+
+    /**
+     * Show camera permission denied message
+     */
+    showCameraPermissionDenied() {
+        const modal = document.createElement('div');
+        modal.className = 'camera-modal';
+        modal.innerHTML = `
+            <div class="camera-modal-content">
+                <div class="camera-modal-header">
+                    <h3>📷 Camera Access</h3>
+                    <button class="camera-modal-close">&times;</button>
+                </div>
+                <div class="camera-modal-body">
+                    <p>Camera access has been denied. To use the camera:</p>
+                    <ol>
+                        <li>Click the camera icon in your browser's address bar</li>
+                        <li>Select "Allow" for camera access</li>
+                        <li>Refresh the page</li>
+                    </ol>
+                    <p>Or you can still upload images from your files:</p>
+                    <button class="camera-option-btn" data-action="file">
+                        📁 Choose from Files
+                    </button>
+                </div>
+            </div>
+        `;
+
+        // Add event listeners
+        modal.querySelector('.camera-modal-close').addEventListener('click', () => {
+            document.body.removeChild(modal);
+        });
+
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                document.body.removeChild(modal);
+            }
+        });
+
+        const fileBtn = modal.querySelector('[data-action="file"]');
+        if (fileBtn) {
+            fileBtn.addEventListener('click', () => {
+                document.body.removeChild(modal);
+                this.elements.imageInput.click();
+            });
+        }
+
+        document.body.appendChild(modal);
+    }
+
+    /**
+     * Show fallback options when camera fails to open
+     */
+    showCameraFallbackOptions(errorMessage) {
+        const modal = document.createElement('div');
+        modal.className = 'camera-modal';
+        modal.innerHTML = `
+            <div class="camera-modal-content">
+                <div class="camera-modal-header">
+                    <h3>📷 Camera Unavailable</h3>
+                    <button class="camera-modal-close">&times;</button>
+                </div>
+                <div class="camera-modal-body">
+                    <p><strong>Camera Error:</strong> ${errorMessage}</p>
+                    <p>You can still add images by uploading from your files:</p>
+                    <button class="camera-option-btn" data-action="file">
+                        📁 Choose from Files
+                    </button>
+                    <p style="margin-top: 1rem; font-size: 0.8125rem; color: #6b7280;">
+                        To use the camera, try refreshing the page or check your camera permissions.
+                    </p>
+                </div>
+            </div>
+        `;
+
+        // Add event listeners
+        modal.querySelector('.camera-modal-close').addEventListener('click', () => {
+            document.body.removeChild(modal);
+        });
+
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                document.body.removeChild(modal);
+            }
+        });
+
+        const fileBtn = modal.querySelector('[data-action="file"]');
+        fileBtn.addEventListener('click', () => {
+            document.body.removeChild(modal);
+            this.elements.imageInput.click();
+        });
+
+        document.body.appendChild(modal);
+    }
+
+    /**
+     * Open camera capture interface with live preview
+     */
+    async openCameraCapture() {
+        try {
+            this.showLoading('Starting camera...');
+
+            // Request permission and start camera stream
+            const stream = await this.cameraManager.startStream();
+            this.hideLoading();
+
+            // Create and show camera preview modal
+            this.showCameraPreview(stream);
+
+        } catch (error) {
+            this.hideLoading();
+            this.showError(error.message);
+        }
+    }
+
+    /**
+     * Show camera preview modal with live video feed
+     */
+    showCameraPreview(stream) {
+        const modal = document.createElement('div');
+        modal.className = 'camera-preview-modal';
+        modal.innerHTML = `
+            <div class="camera-preview-content">
+                <div class="camera-preview-header">
+                    <div class="camera-header-content">
+                        <h3>📷 Take Photo</h3>
+                        <p class="camera-subtitle">Position your items and click capture</p>
+                    </div>
+                    <button class="camera-preview-close">&times;</button>
+                </div>
+                <div class="camera-preview-body">
+                    <div class="camera-video-container">
+                        <video id="cameraPreview" autoplay playsinline muted></video>
+                        <div class="camera-overlay">
+                            <div class="camera-frame"></div>
+                        </div>
+                    </div>
+                    <div class="camera-controls">
+                        <div class="camera-device-selector" style="display: none;">
+                            <select id="cameraDeviceSelect">
+                                <option value="">Select Camera</option>
+                            </select>
+                        </div>
+                        <div class="camera-actions">
+                            <button class="camera-action-btn camera-switch-btn" id="cameraSwitchBtn" title="Switch Camera">
+                                🔄
+                            </button>
+                            <button class="camera-action-btn camera-capture-btn" id="cameraCaptureBtn" title="Take Photo">
+                                📷
+                            </button>
+                            <button class="camera-action-btn camera-file-btn" id="cameraFileBtn" title="Choose File Instead">
+                                📁
+                            </button>
+                            <button class="camera-action-btn camera-cancel-btn" id="cameraCancelBtn" title="Cancel">
+                                ❌
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Get video element and set stream
+        const video = modal.querySelector('#cameraPreview');
+        video.srcObject = stream;
+
+        // Populate device selector if multiple cameras available
+        this.populateCameraDeviceSelector(modal);
+
+        // Add event listeners
+        this.setupCameraPreviewEventListeners(modal, video);
+
+        // Add to DOM
+        document.body.appendChild(modal);
+
+        // Focus on capture button for keyboard accessibility
+        modal.querySelector('#cameraCaptureBtn').focus();
+    }
+
+    /**
+     * Populate camera device selector dropdown
+     */
+    async populateCameraDeviceSelector(modal) {
+        const deviceSelect = modal.querySelector('#cameraDeviceSelect');
+        const deviceContainer = modal.querySelector('.camera-device-selector');
+
+        if (this.cameraManager.devices.length > 1) {
+            // Show device selector if multiple cameras available
+            deviceContainer.style.display = 'block';
+
+            // Clear existing options except the first one
+            deviceSelect.innerHTML = '<option value="">Select Camera</option>';
+
+            // Add device options
+            this.cameraManager.devices.forEach(device => {
+                const option = document.createElement('option');
+                option.value = device.deviceId;
+                option.textContent = device.label || `Camera ${device.deviceId.substring(0, 8)}...`;
+                option.selected = device.deviceId === this.cameraManager.currentDeviceId;
+                deviceSelect.appendChild(option);
+            });
+        }
+    }
+
+    /**
+     * Setup event listeners for camera preview modal
+     */
+    setupCameraPreviewEventListeners(modal, video) {
+        const closeBtn = modal.querySelector('.camera-preview-close');
+        const cancelBtn = modal.querySelector('#cameraCancelBtn');
+        const captureBtn = modal.querySelector('#cameraCaptureBtn');
+        const switchBtn = modal.querySelector('#cameraSwitchBtn');
+        const fileBtn = modal.querySelector('#cameraFileBtn');
+        const deviceSelect = modal.querySelector('#cameraDeviceSelect');
+
+        // Close modal function
+        const closeModal = () => {
+            this.cameraManager.stopStream();
+            document.body.removeChild(modal);
+        };
+
+        // Close button events
+        closeBtn.addEventListener('click', closeModal);
+        cancelBtn.addEventListener('click', closeModal);
+
+        // Click outside to close
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeModal();
+            }
+        });
+
+        // Keyboard events
+        modal.addEventListener('keydown', (e) => {
+            switch (e.key) {
+                case 'Escape':
+                    closeModal();
+                    break;
+                case 'Enter':
+                case ' ':
+                    if (e.target === captureBtn) {
+                        e.preventDefault();
+                        this.capturePhoto(video, modal);
+                    }
+                    break;
+            }
+        });
+
+        // Capture photo
+        captureBtn.addEventListener('click', () => {
+            this.capturePhoto(video, modal);
+        });
+
+        // Choose file instead of camera
+        fileBtn.addEventListener('click', () => {
+            closeModal();
+            this.elements.imageInput.click();
+        });
+
+        // Switch camera (for mobile devices with front/back cameras)
+        switchBtn.addEventListener('click', async () => {
+            await this.switchCamera(modal, video);
+        });
+
+        // Device selector change
+        deviceSelect.addEventListener('change', async (e) => {
+            if (e.target.value) {
+                await this.switchToDevice(e.target.value, modal, video);
+            }
+        });
+
+        // Hide switch button if only one camera
+        if (this.cameraManager.devices.length <= 1) {
+            switchBtn.style.display = 'none';
+        }
+    }
+    /**
+     * Capture photo from video stream
+     */
+    async capturePhoto(video, modal) {
+        try {
+            // Create canvas to capture frame
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+
+            // Set canvas dimensions to match video
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+
+            // Draw current video frame to canvas
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // Convert canvas to blob with high quality JPEG
+            canvas.toBlob(async (blob) => {
+                if (blob) {
+                    // Create file from blob
+                    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                    const file = new File([blob], `camera-capture-${timestamp}.jpg`, {
+                        type: 'image/jpeg',
+                        lastModified: Date.now()
+                    });
+
+                    // Close camera modal
+                    this.cameraManager.stopStream();
+                    document.body.removeChild(modal);
+
+                    // Process the captured image
+                    await this.handleImageUpload(file);
+                } else {
+                    this.showError('Failed to capture photo. Please try again.');
+                }
+            }, 'image/jpeg', 0.9);
+
+        } catch (error) {
+            console.error('Photo capture error:', error);
+            this.showError('Failed to capture photo. Please try again.');
+        }
+    }
+
+    /**
+     * Switch to next available camera
+     */
+    async switchCamera(modal, video) {
+        try {
+            const currentIndex = this.cameraManager.devices.findIndex(
+                device => device.deviceId === this.cameraManager.currentDeviceId
+            );
+
+            const nextIndex = (currentIndex + 1) % this.cameraManager.devices.length;
+            const nextDevice = this.cameraManager.devices[nextIndex];
+
+            await this.switchToDevice(nextDevice.deviceId, modal, video);
+
+        } catch (error) {
+            console.error('Camera switch error:', error);
+            this.showError('Failed to switch camera. Please try again.');
+        }
+    }
+
+    /**
+     * Switch to specific camera device
+     */
+    async switchToDevice(deviceId, modal, video) {
+        try {
+            // Show loading state
+            const captureBtn = modal.querySelector('#cameraCaptureBtn');
+            const switchBtn = modal.querySelector('#cameraSwitchBtn');
+
+            captureBtn.disabled = true;
+            switchBtn.disabled = true;
+
+            // Switch camera stream
+            const newStream = await this.cameraManager.switchDevice(deviceId);
+            video.srcObject = newStream;
+
+            // Update device selector
+            const deviceSelect = modal.querySelector('#cameraDeviceSelect');
+            deviceSelect.value = deviceId;
+
+            // Re-enable controls
+            captureBtn.disabled = false;
+            switchBtn.disabled = false;
+
+        } catch (error) {
+            console.error('Device switch error:', error);
+            this.showError('Failed to switch to selected camera.');
+
+            // Re-enable controls
+            const captureBtn = modal.querySelector('#cameraCaptureBtn');
+            const switchBtn = modal.querySelector('#cameraSwitchBtn');
+            captureBtn.disabled = false;
+            switchBtn.disabled = false;
         }
     }
 
@@ -384,14 +1010,14 @@ class BinBotUI {
     addMessage(content, isUser = false) {
         const messageDiv = document.createElement('div');
         messageDiv.className = isUser ? 'user-message' : 'bot-message';
-        
+
         const contentDiv = document.createElement('div');
         contentDiv.className = 'message-content';
         contentDiv.textContent = content;
-        
+
         messageDiv.appendChild(contentDiv);
         this.elements.chatMessages.appendChild(messageDiv);
-        
+
         // Scroll to bottom
         this.elements.chatMessages.scrollTop = this.elements.chatMessages.scrollHeight;
     }
@@ -491,7 +1117,7 @@ document.addEventListener('DOMContentLoaded', () => {
 window.addEventListener('beforeunload', () => {
     if (window.binBot && window.binBot.sessionId) {
         // Send session cleanup request (fire and forget)
-        navigator.sendBeacon(`${window.location.origin}/api/session/${window.binBot.sessionId}`, 
+        navigator.sendBeacon(`${window.location.origin}/api/session/${window.binBot.sessionId}`,
             JSON.stringify({ method: 'DELETE' }));
     }
 });
