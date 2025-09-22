@@ -7,9 +7,10 @@ interface ChatInputProps {
   onSendMessage: (text: string) => void;
   onCameraClick: () => void;
   disabled?: boolean;
+  onVoiceStateChange?: (isListening: boolean) => void;
 }
 
-const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onCameraClick, disabled = false }) => {
+const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onCameraClick, disabled = false, onVoiceStateChange }) => {
   const [text, setText] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -54,6 +55,13 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onCameraClick, dis
       inputRef.current.focus();
     }
   }, [disabled]);
+
+  // Notify parent about voice input state changes
+  useEffect(() => {
+    if (onVoiceStateChange) {
+      onVoiceStateChange(voiceInput.isListening);
+    }
+  }, [voiceInput.isListening, onVoiceStateChange]);
 
   return (
     <div className="p-4 bg-white border-t border-slate-200">

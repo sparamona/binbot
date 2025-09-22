@@ -10,9 +10,10 @@ interface ChatPanelProps {
   onSendMessage: (text: string) => void;
   onCameraClick: () => void;
   isLoading?: boolean;
+  onVoiceStateChange?: (isListening: boolean) => void;
 }
 
-const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, onCameraClick, isLoading = false }) => {
+const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, onCameraClick, isLoading = false, onVoiceStateChange }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { isConnected } = useApiStatus();
 
@@ -71,7 +72,12 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, onCamera
           <div ref={messagesEndRef} />
         </div>
       </div>
-      <ChatInput onSendMessage={onSendMessage} onCameraClick={onCameraClick} disabled={isLoading || !isConnected} />
+      <ChatInput
+        onSendMessage={onSendMessage}
+        onCameraClick={onCameraClick}
+        disabled={isLoading || !isConnected}
+        onVoiceStateChange={onVoiceStateChange}
+      />
     </div>
   );
 };

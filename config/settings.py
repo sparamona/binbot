@@ -10,6 +10,7 @@ load_dotenv()
 
 # Simple configuration constants
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 DATABASE_PATH = os.getenv('DATABASE_PATH', './data/chromadb')
 IMAGES_PATH = os.getenv('IMAGES_PATH', './data/images')
 API_HOST = os.getenv('API_HOST', '0.0.0.0')

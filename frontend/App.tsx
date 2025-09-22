@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import ChatPanel from './components/ChatPanel';
 import InventoryPanel from './components/InventoryPanel';
@@ -6,12 +6,24 @@ import CameraModal from './components/CameraModal';
 import ImageModal from './components/ImageModal';
 import ErrorDisplay from './components/ErrorDisplay';
 import { useChat, useInventory } from './hooks/useApi';
+import { useTextToSpeech } from './hooks/useTextToSpeech';
 import type { Message, InventoryItem } from './types';
 
 const App: React.FC = () => {
   // Initialize inventory hook first
   const [currentBinState, setCurrentBinState] = useState<string>('');
   const { items: inventoryItems, isLoading: inventoryLoading, lastUpdated, reload: reloadInventory } = useInventory(currentBinState);
+
+  // Voice input tracking state
+  const [isVoiceInputActive, setIsVoiceInputActive] = useState(false);
+  const lastBotMessageRef = useRef<string>('');
+
+  // Text-to-speech functionality
+  const tts = useTextToSpeech({
+    onStart: () => console.log('TTS started'),
+    onEnd: () => console.log('TTS ended'),
+    onError: (error) => console.error('TTS error:', error)
+  });
 
   // Use real API hooks with inventory update callback
   const { messages, isLoading, currentBin, sendMessage, uploadImage } = useChat(() => {
@@ -25,6 +37,20 @@ const App: React.FC = () => {
       setCurrentBinState(currentBin);
     }
   }, [currentBin, currentBinState]);
+
+  // Auto-speak bot responses when voice input was used
+  useEffect(() => {
+    if (messages.length > 0) {
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage.sender === 'bot' &&
+          lastMessage.text !== lastBotMessageRef.current &&
+          isVoiceInputActive) {
+        // Speak the bot response
+        tts.speak(lastMessage.text);
+        lastBotMessageRef.current = lastMessage.text;
+      }
+    }
+  }, [messages, isVoiceInputActive, tts]);
 
   // UI state
   const [activeTab, setActiveTab] = useState<'chat' | 'inventory'>('chat');
@@ -121,6 +147,7 @@ const App: React.FC = () => {
             onSendMessage={handleSendMessage}
             onCameraClick={toggleCamera}
             isLoading={isLoading}
+            onVoiceStateChange={setIsVoiceInputActive}
           />
         </div>
 

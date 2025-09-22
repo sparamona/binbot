@@ -13,6 +13,7 @@ from api.session import router as session_router
 from api.inventory import router as inventory_router
 from api.images import router as images_router
 from api.chat import router as chat_router
+from api.tts import router as tts_router
 
 
 def create_app() -> FastAPI:
@@ -39,6 +40,7 @@ def create_app() -> FastAPI:
     app.include_router(inventory_router, tags=["Inventory"])
     app.include_router(images_router, tags=["Images"])
     app.include_router(chat_router, tags=["Chat"])
+    app.include_router(tts_router, tags=["TTS"])
     
     # Serve static files (React build)
     build_path = Path("frontend/dist")
