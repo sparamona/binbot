@@ -14,11 +14,9 @@ const App: React.FC = () => {
   const [currentBinState, setCurrentBinState] = useState<string>('');
   const { items: inventoryItems, isLoading: inventoryLoading, lastUpdated, reload: reloadInventory } = useInventory(currentBinState);
 
-  // Voice input tracking state
-  const [isVoiceInputActive, setIsVoiceInputActive] = useState(false);
-  const [wasLastMessageVoice, setWasLastMessageVoice] = useState(false);
+  // TTS toggle state
+  const [isTTSEnabled, setIsTTSEnabled] = useState(false);
   const lastBotMessageRef = useRef<string>('');
-  const micActivationTimeRef = useRef<number>(0);
 
   // Text-to-speech functionality
   const tts = useTextToSpeech({
@@ -40,31 +38,19 @@ const App: React.FC = () => {
     }
   }, [currentBin, currentBinState]);
 
-  // Track when microphone is activated to avoid reading old messages
+  // Auto-speak bot responses when TTS is enabled
   useEffect(() => {
-    if (isVoiceInputActive) {
-      micActivationTimeRef.current = Date.now();
-    }
-  }, [isVoiceInputActive]);
-
-  // Auto-speak bot responses only for NEW messages after microphone activation
-  useEffect(() => {
-    if (messages.length > 0 && isVoiceInputActive) {
+    if (messages.length > 0 && isTTSEnabled) {
       const lastMessage = messages[messages.length - 1];
       if (lastMessage.sender === 'bot' &&
           lastMessage.text !== lastBotMessageRef.current) {
 
-        // Only speak if this message arrived after microphone was activated
-        // Use message ID as a proxy for message timestamp (higher ID = newer message)
-        const messageTime = lastMessage.id;
-        if (messageTime > micActivationTimeRef.current) {
-          // Speak the bot response
-          tts.speak(lastMessage.text);
-          lastBotMessageRef.current = lastMessage.text;
-        }
+        console.log('🔊 Auto-speaking bot response (TTS enabled):', lastMessage.text.substring(0, 50) + '...');
+        tts.speak(lastMessage.text);
+        lastBotMessageRef.current = lastMessage.text;
       }
     }
-  }, [messages, isVoiceInputActive, tts]);
+  }, [messages, isTTSEnabled, tts]);
 
   // UI state
   const [activeTab, setActiveTab] = useState<'chat' | 'inventory'>('chat');
@@ -74,17 +60,15 @@ const App: React.FC = () => {
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
-  const handleSendMessage = async (text: string, isVoiceInput: boolean = false, forceMicrophoneActive?: boolean) => {
+  const handleSendMessage = async (text: string, isVoiceInput: boolean = false, forceTTSFormat?: boolean) => {
     if (!text.trim()) return;
 
-    // Track if this message was from voice input
-    setWasLastMessageVoice(isVoiceInput);
+    // Use TTS format if explicitly requested or if TTS toggle is enabled
+    const useTTSFormat = forceTTSFormat !== undefined ? forceTTSFormat : isTTSEnabled;
+    console.log('🎤 DEBUG: handleSendMessage - isVoiceInput:', isVoiceInput, 'forceTTSFormat:', forceTTSFormat, 'isTTSEnabled:', isTTSEnabled, 'useTTSFormat:', useTTSFormat);
 
-    // Use forceMicrophoneActive if provided, otherwise fall back to isVoiceInputActive
-    const microphoneActive = forceMicrophoneActive !== undefined ? forceMicrophoneActive : isVoiceInputActive;
-    console.log('🎤 DEBUG: handleSendMessage - isVoiceInput:', isVoiceInput, 'forceMicrophoneActive:', forceMicrophoneActive, 'microphoneActive:', microphoneActive);
-    // Use real API to send message with format based on microphone state
-    await sendMessage(text, microphoneActive);
+    // Send message with format based on TTS toggle
+    await sendMessage(text, useTTSFormat);
 
     // Reload inventory after any chat response
     reloadInventory();
@@ -103,8 +87,8 @@ const App: React.FC = () => {
     try {
       setError(null);
 
-      // Upload image and get analysis - use microphone state for format selection
-      const response = await uploadImage(file, isVoiceInputActive);
+      // Upload image and get analysis - use TTS toggle for format selection
+      const response = await uploadImage(file, isTTSEnabled);
 
       if (response.success) {
         // Reload inventory to show any new items
@@ -150,7 +134,10 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-white text-slate-800 font-sans">
-      <Sidebar />
+      <Sidebar
+        isTTSEnabled={isTTSEnabled}
+        onTTSToggle={() => setIsTTSEnabled(!isTTSEnabled)}
+      />
       <main className="flex flex-1 flex-col md:flex-row overflow-hidden relative">
         {error && <ErrorDisplay message={error} onClose={() => setError(null)} />}
         
@@ -167,7 +154,6 @@ const App: React.FC = () => {
             onSendMessage={handleSendMessage}
             onCameraClick={toggleCamera}
             isLoading={isLoading}
-            onVoiceStateChange={setIsVoiceInputActive}
             isTTSSpeaking={tts.isSpeaking}
             onTTSStop={tts.stopSpeaking}
           />

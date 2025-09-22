@@ -4,15 +4,14 @@ import { SendIcon, CameraIcon, MicIcon, StopIcon } from './icons';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 
 interface ChatInputProps {
-  onSendMessage: (text: string, isVoiceInput?: boolean, forceMicrophoneActive?: boolean) => void;
+  onSendMessage: (text: string, isVoiceInput?: boolean, forceTTSFormat?: boolean) => void;
   onCameraClick: () => void;
   disabled?: boolean;
-  onVoiceStateChange?: (isListening: boolean) => void;
   isTTSSpeaking?: boolean;
   onTTSStop?: () => void;
 }
 
-const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onCameraClick, disabled = false, onVoiceStateChange, isTTSSpeaking = false, onTTSStop }) => {
+const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onCameraClick, disabled = false, isTTSSpeaking = false, onTTSStop }) => {
   const [text, setText] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -44,8 +43,8 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onCameraClick, dis
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (disabled || !text.trim()) return;
-    // Use current microphone state to determine format
-    onSendMessage(text, false, voiceInput.isMicrophoneActive); // Pass mic state directly
+    // Manual text input - let App component decide format based on TTS toggle
+    onSendMessage(text, false); // false = not voice input, format decided by TTS toggle
     setText('');
 
     // Refocus the input after sending message
@@ -61,32 +60,31 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onCameraClick, dis
     }
   }, [disabled]);
 
-  // Notify parent about voice input state changes
-  // During TTS, keep microphone active state for format selection
-  useEffect(() => {
-    const effectiveState = voiceInput.isMicrophoneActive || isTTSSpeaking;
-    console.log('🎤 DEBUG: ChatInput - isMicrophoneActive:', voiceInput.isMicrophoneActive, 'isTTSSpeaking:', isTTSSpeaking, 'effectiveState:', effectiveState);
-    if (onVoiceStateChange) {
-      console.log('🎤 DEBUG: ChatInput - calling onVoiceStateChange with:', effectiveState);
-      onVoiceStateChange(effectiveState);
-    }
-  }, [voiceInput.isMicrophoneActive, isTTSSpeaking, onVoiceStateChange]);
+  // For PTT, we don't need to track microphone state - always use TTS format for voice input
+  // Remove the voice state change notification since PTT handles format directly
 
   return (
     <div className="p-4 bg-white border-t border-slate-200">
       <form onSubmit={handleSubmit} className="relative">
         <div className="absolute inset-y-0 left-0 flex items-center pl-2 space-x-1">
-          {/* Microphone button - always visible */}
+          {/* Microphone button - Push to Talk */}
           <Button
             type="button"
             variant="ghost"
-            className={`p-1 ${voiceInput.isMicrophoneActive ? 'bg-red-100 text-red-600' : ''}`}
-            aria-label={voiceInput.isMicrophoneActive ? "Turn off microphone" : "Turn on microphone"}
-            onClick={voiceInput.toggleListening}
+            className={`p-1 ${voiceInput.isListening ? 'bg-red-100 text-red-600' : ''}`}
+            aria-label={voiceInput.isListening ? "Release to stop recording" : "Hold to talk"}
+            onMouseDown={voiceInput.startListening}
+            onMouseUp={voiceInput.stopListening}
+            onMouseLeave={voiceInput.stopListening} // Stop if mouse leaves button
+            onTouchStart={voiceInput.startListening}
+            onTouchEnd={voiceInput.stopListening}
             disabled={disabled || !voiceInput.isSupported}
-            title={!voiceInput.isSupported ? "Voice input not supported in this browser" : undefined}
+            title={
+              !voiceInput.isSupported ? "Voice input not supported in this browser" :
+              "Hold to talk, release to send"
+            }
           >
-            <MicIcon className={`w-5 h-5 ${voiceInput.isMicrophoneActive ? 'text-red-600' : 'text-slate-500'}`} />
+            <MicIcon className={`w-5 h-5 ${voiceInput.isListening ? 'text-red-600' : 'text-slate-500'}`} />
           </Button>
 
           {/* Stop button - only visible during TTS */}
