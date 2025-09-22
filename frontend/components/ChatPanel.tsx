@@ -12,9 +12,11 @@ interface ChatPanelProps {
   isLoading?: boolean;
   isTTSSpeaking?: boolean;
   onTTSStop?: () => void;
+  isTTSEnabled?: boolean;
+  onTTSToggle?: () => void;
 }
 
-const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, onCameraClick, isLoading = false, isTTSSpeaking = false, onTTSStop }) => {
+const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, onCameraClick, isLoading = false, isTTSSpeaking = false, onTTSStop, isTTSEnabled = false, onTTSToggle }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { isConnected } = useApiStatus();
 
@@ -79,6 +81,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, onCamera
         disabled={isLoading || !isConnected}
         isTTSSpeaking={isTTSSpeaking}
         onTTSStop={onTTSStop}
+        isTTSEnabled={isTTSEnabled}
+        onTTSToggle={onTTSToggle}
       />
     </div>
   );

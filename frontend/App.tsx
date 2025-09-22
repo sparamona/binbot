@@ -156,6 +156,8 @@ const App: React.FC = () => {
             isLoading={isLoading}
             isTTSSpeaking={tts.isSpeaking}
             onTTSStop={tts.stopSpeaking}
+            isTTSEnabled={isTTSEnabled}
+            onTTSToggle={() => setIsTTSEnabled(!isTTSEnabled)}
           />
         </div>
 

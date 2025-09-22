@@ -29,7 +29,7 @@ export function useChat(onInventoryUpdate?: () => void) {
   const [isLoading, setIsLoading] = useState(false);
   const [currentBin, setCurrentBin] = useState<string>('');
 
-  const sendMessage = useCallback(async (text: string, isMicrophoneActive: boolean = false) => {
+  const sendMessage = useCallback(async (text: string, useTTSFormat: boolean = false) => {
     if (!text.trim() || isLoading) return;
 
     // Add user message immediately
@@ -46,9 +46,9 @@ export function useChat(onInventoryUpdate?: () => void) {
     setIsLoading(true);
 
     try {
-      // Use TTS format if microphone is active, otherwise use MD format
-      const format = isMicrophoneActive ? 'TTS' : 'MD';
-      console.log('🎤 DEBUG: sendMessage called with isMicrophoneActive:', isMicrophoneActive, 'format:', format);
+      // Use TTS format if requested, otherwise use MD format
+      const format = useTTSFormat ? 'TTS' : 'MD';
+      console.log('🎤 DEBUG: sendMessage called with useTTSFormat:', useTTSFormat, 'format:', format);
       const response = await apiClient.sendChatMessage(text, format);
       
       // Add bot response
@@ -92,14 +92,14 @@ export function useChat(onInventoryUpdate?: () => void) {
     }
   }, [isLoading]);
 
-  const uploadImage = useCallback(async (file: File, isMicrophoneActive: boolean = false) => {
+  const uploadImage = useCallback(async (file: File, useTTSFormat: boolean = false) => {
     if (isLoading) return;
 
     setIsLoading(true);
 
     try {
-      // Use TTS format if microphone is active, otherwise use MD format
-      const format = isMicrophoneActive ? 'TTS' : 'MD';
+      // Use TTS format if requested, otherwise use MD format
+      const format = useTTSFormat ? 'TTS' : 'MD';
       const response = await apiClient.uploadImage(file, format);
       
       // Add image upload message

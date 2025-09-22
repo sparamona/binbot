@@ -7,7 +7,7 @@ import { useState, useRef, useCallback } from 'react';
 
 interface VoiceInputOptions {
   onResult?: (transcript: string) => void;
-  onFinalResult?: (finalTranscript: string, isMicrophoneActive: boolean) => void;
+  onFinalResult?: (finalTranscript: string) => void;
   onError?: (error: string) => void;
   language?: string;
 }
@@ -38,6 +38,7 @@ export function useVoiceInput(options: VoiceInputOptions = {}) {
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const finalTranscriptRef = useRef<string>('');
+  const shouldSubmitOnEndRef = useRef<boolean>(false); // Track if we should submit when recognition ends
 
   // Check if browser supports speech recognition
   function checkVoiceSupport(): boolean {
@@ -125,9 +126,17 @@ export function useVoiceInput(options: VoiceInputOptions = {}) {
     };
 
     recognition.onend = () => {
-      console.log('🎤 DEBUG: Speech recognition ended');
+      console.log('🎤 DEBUG: Speech recognition ended, shouldSubmit:', shouldSubmitOnEndRef.current);
       setState(prev => ({ ...prev, isListening: false }));
-      // Don't auto-submit here - only submit on manual button release
+
+      // Submit if button was released early but we were waiting for transcription to complete
+      if (shouldSubmitOnEndRef.current && onFinalResult && finalTranscriptRef.current.trim()) {
+        const fullFinalTranscript = finalTranscriptRef.current.trim();
+        console.log('🎤 DEBUG: Submitting delayed PTT result:', fullFinalTranscript);
+        onFinalResult(fullFinalTranscript);
+        finalTranscriptRef.current = '';
+        shouldSubmitOnEndRef.current = false;
+      }
     };
 
     recognitionRef.current = recognition;
@@ -167,12 +176,17 @@ export function useVoiceInput(options: VoiceInputOptions = {}) {
       recognitionRef.current.stop();
       setState(prev => ({ ...prev, isListening: false }));
 
-      // Submit accumulated transcript when manually stopping (PTT release)
+      // Try to submit immediately if we have a complete transcript
       if (onFinalResult && finalTranscriptRef.current.trim()) {
         const fullFinalTranscript = finalTranscriptRef.current.trim();
-        console.log('🎤 DEBUG: Submitting PTT result on button release:', fullFinalTranscript);
-        onFinalResult(fullFinalTranscript, true); // Always use TTS format for PTT
+        console.log('🎤 DEBUG: Submitting PTT result immediately on button release:', fullFinalTranscript);
+        onFinalResult(fullFinalTranscript); // Format decided by TTS toggle
         finalTranscriptRef.current = ''; // Reset after sending
+        shouldSubmitOnEndRef.current = false; // Don't submit again on onend
+      } else {
+        // No complete transcript yet, wait for recognition to end and then submit
+        console.log('🎤 DEBUG: No complete transcript yet, will submit when recognition ends');
+        shouldSubmitOnEndRef.current = true;
       }
     }
   }, [state.isListening, onFinalResult]);
