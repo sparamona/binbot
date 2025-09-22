@@ -41,6 +41,7 @@ export function useVoiceInput(options: VoiceInputOptions = {}) {
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const finalTranscriptRef = useRef<string>('');
   const isMicrophoneActiveRef = useRef<boolean>(false); // Track current microphone state
+  const submitTimeoutRef = useRef<NodeJS.Timeout | null>(null); // Debounce timer
 
   // Check if browser supports speech recognition
   function checkVoiceSupport(): boolean {
@@ -80,9 +81,21 @@ export function useVoiceInput(options: VoiceInputOptions = {}) {
       let finalTranscript = '';
 
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          finalTranscript += transcript;
+        const result = event.results[i];
+        const transcript = result[0].transcript;
+        const confidence = result[0].confidence;
+
+        console.log('🎤 DEBUG: Result -', 'isFinal:', result.isFinal, 'confidence:', confidence, 'text:', transcript);
+
+        if (result.isFinal) {
+          // Check confidence if available (mobile Chrome), otherwise accept all final results
+          const hasGoodConfidence = confidence === undefined || confidence > 0.1;
+          if (hasGoodConfidence) {
+            finalTranscript += transcript;
+            console.log('🎤 DEBUG: Accepted final result with confidence:', confidence);
+          } else {
+            console.log('🎤 DEBUG: Rejected low confidence result:', confidence);
+          }
         } else {
           interimTranscript += transcript;
         }
@@ -103,13 +116,22 @@ export function useVoiceInput(options: VoiceInputOptions = {}) {
         onResult(combinedTranscript);
       }
 
-      // Call final result callback when we have final text
+      // Submit immediately if we have high-confidence final results
       if (finalTranscript && onFinalResult) {
-        const fullFinalTranscript = finalTranscriptRef.current.trim();
-        if (fullFinalTranscript) {
-          onFinalResult(fullFinalTranscript, isMicrophoneActiveRef.current);
-          finalTranscriptRef.current = ''; // Reset after sending
+        // Clear any existing timeout
+        if (submitTimeoutRef.current) {
+          clearTimeout(submitTimeoutRef.current);
         }
+
+        // Submit after a short delay to allow for additional results
+        submitTimeoutRef.current = setTimeout(() => {
+          const fullFinalTranscript = finalTranscriptRef.current.trim();
+          if (fullFinalTranscript) {
+            console.log('🎤 DEBUG: Submitting high-confidence result:', fullFinalTranscript);
+            onFinalResult(fullFinalTranscript, isMicrophoneActiveRef.current);
+            finalTranscriptRef.current = ''; // Reset after sending
+          }
+        }, 500); // Short delay to batch multiple final results
       }
     };
 
@@ -124,6 +146,14 @@ export function useVoiceInput(options: VoiceInputOptions = {}) {
     recognition.onend = () => {
       console.log('🎤 DEBUG: Speech recognition ended, current isMicrophoneActive:', state.isMicrophoneActive);
       setState(prev => ({ ...prev, isListening: false }));
+
+      // Submit accumulated transcript when speech recognition ends (natural pause)
+      if (onFinalResult && finalTranscriptRef.current.trim()) {
+        const fullFinalTranscript = finalTranscriptRef.current.trim();
+        console.log('🎤 DEBUG: Submitting on speech end:', fullFinalTranscript);
+        onFinalResult(fullFinalTranscript, isMicrophoneActiveRef.current);
+        finalTranscriptRef.current = ''; // Reset after sending
+      }
     };
 
     recognitionRef.current = recognition;
@@ -162,6 +192,11 @@ export function useVoiceInput(options: VoiceInputOptions = {}) {
     if (recognitionRef.current && state.isListening) {
       recognitionRef.current.stop();
       setState(prev => ({ ...prev, isListening: false }));
+    }
+    // Clear any pending submission timeout
+    if (submitTimeoutRef.current) {
+      clearTimeout(submitTimeoutRef.current);
+      submitTimeoutRef.current = null;
     }
   }, [state.isListening]);
 
