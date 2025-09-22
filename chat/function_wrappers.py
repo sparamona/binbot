@@ -2,6 +2,7 @@
 Simple function wrappers for LLM function calling
 """
 
+import json
 from typing import List, Dict, Any
 
 from api.inventory import (
@@ -22,6 +23,25 @@ class InventoryFunctionWrappers:
     def __init__(self, session_id: str):
         self.session_id = session_id
         self.session_manager = get_session_manager()
+
+    def _log_function_call_and_response(self, function_name: str, args: Dict[str, Any], response: Dict[str, Any]):
+        """Log function call and response to conversation history"""
+        try:
+            # Create a structured log entry with both call and response
+            log_entry = {
+                "function_call": {
+                    "name": function_name,
+                    "arguments": args
+                },
+                "function_response": response
+            }
+
+            # Add to conversation history as a model message (Gemini only accepts 'user' and 'model' roles)
+            log_message = f"FUNCTION_CALL: {function_name}({', '.join(f'{k}={v}' for k, v in args.items())})\nRESPONSE: {json.dumps(response, indent=2)}"
+            self.session_manager.add_message(self.session_id, "model", log_message)
+
+        except Exception as e:
+            logger.error(f"Failed to log function call {function_name}: {e}")
     
     def add_items(self, bin_id: str, items: List[Dict[str, str]]) -> Dict[str, Any]:
         """Add items to a bin.
@@ -60,13 +80,22 @@ class InventoryFunctionWrappers:
             # Update session current bin
             self.session_manager.set_current_bin(self.session_id, bin_id)
 
+            # Log function call and response to conversation history
+            response_dict = response.model_dump()
+            self._log_function_call_and_response("add_items", {"bin_id": bin_id, "items": items}, response_dict)
+
             logger.info(f"RESULT add_items: {response.message}")
-            return response.model_dump()
+            return response_dict
 
         except Exception as e:
             error_result = f"Error adding items: {str(e)}"
+            error_response = {"success": False, "message": error_result}
+
+            # Log function call and error response to conversation history
+            self._log_function_call_and_response("add_items", {"bin_id": bin_id, "items": items}, error_response)
+
             logger.error(f"RESULT add_items: {error_result}")
-            return {"success": False, "message": error_result}
+            return error_response
     
     def search_items(self, query: str, limit: int = 10) -> Dict[str, Any]:
         """Search for items in inventory using semantic search.
@@ -97,13 +126,22 @@ class InventoryFunctionWrappers:
             # Use business logic function
             response = search_items_logic(query, limit)
 
+            # Log function call and response to conversation history
+            response_dict = response.model_dump()
+            self._log_function_call_and_response("search_items", {"query": query, "limit": limit}, response_dict)
+
             logger.info(f"RESULT search_items: Found {len(response.items)} items")
-            return response.model_dump()
+            return response_dict
 
         except Exception as e:
             error_result = f"Error searching items: {str(e)}"
+            error_response = {"success": False, "items": [], "current_bin": ""}
+
+            # Log function call and error response to conversation history
+            self._log_function_call_and_response("search_items", {"query": query, "limit": limit}, error_response)
+
             logger.error(f"RESULT search_items: {error_result}")
-            return {"success": False, "items": [], "current_bin": ""}
+            return error_response
     
     def get_bin_contents(self, bin_id: str) -> Dict[str, Any]:
         """Get all items in a specific storage bin.  This is the only way to know the contents of a bin bin.
@@ -136,14 +174,23 @@ class InventoryFunctionWrappers:
             # Update session current bin
             self.session_manager.set_current_bin(self.session_id, bin_id)
 
+            # Log function call and response to conversation history
+            response_dict = response.model_dump()
+            self._log_function_call_and_response("get_bin_contents", {"bin_id": bin_id}, response_dict)
+
             item_names = [item.name for item in response.items]
             logger.info(f"RESULT get_bin_contents: Found {len(response.items)} items in bin {bin_id}: {item_names}")
-            return response.model_dump()
+            return response_dict
 
         except Exception as e:
             error_result = f"Error getting bin contents: {str(e)}"
+            error_response = {"success": False, "bin_id": bin_id, "items": [], "total_count": 0}
+
+            # Log function call and error response to conversation history
+            self._log_function_call_and_response("get_bin_contents", {"bin_id": bin_id}, error_response)
+
             logger.error(f"RESULT get_bin_contents: {error_result}")
-            return {"success": False, "bin_id": bin_id, "items": [], "total_count": 0}
+            return error_response
     
     def move_items(self, target_bin_id: str, item_ids: List[str]) -> Dict[str, Any]:
         """Move items from their current bins to a target bin.
@@ -169,13 +216,22 @@ class InventoryFunctionWrappers:
             # Update session current bin
             self.session_manager.set_current_bin(self.session_id, target_bin_id)
 
+            # Log function call and response to conversation history
+            response_dict = response.model_dump()
+            self._log_function_call_and_response("move_items", {"target_bin_id": target_bin_id, "item_ids": item_ids}, response_dict)
+
             logger.info(f"RESULT move_items: {response.message}")
-            return response.model_dump()
+            return response_dict
 
         except Exception as e:
             error_result = f"Error moving items: {str(e)}"
+            error_response = {"success": False, "message": error_result}
+
+            # Log function call and error response to conversation history
+            self._log_function_call_and_response("move_items", {"target_bin_id": target_bin_id, "item_ids": item_ids}, error_response)
+
             logger.error(f"RESULT move_items: {error_result}")
-            return {"success": False, "message": error_result}
+            return error_response
     
     def remove_items(self, item_ids: List[str]) -> Dict[str, Any]:
         """Remove items completely from the inventory system.
@@ -197,13 +253,22 @@ class InventoryFunctionWrappers:
             # Use business logic function
             response = remove_items_logic(item_ids)
 
+            # Log function call and response to conversation history
+            response_dict = response.model_dump()
+            self._log_function_call_and_response("remove_items", {"item_ids": item_ids}, response_dict)
+
             logger.info(f"RESULT remove_items: {response.message}")
-            return response.model_dump()
+            return response_dict
 
         except Exception as e:
             error_result = f"Error removing items: {str(e)}"
+            error_response = {"success": False, "message": error_result}
+
+            # Log function call and error response to conversation history
+            self._log_function_call_and_response("remove_items", {"item_ids": item_ids}, error_response)
+
             logger.error(f"RESULT remove_items: {error_result}")
-            return {"success": False, "message": error_result}
+            return error_response
 
 
 def get_function_wrappers(session_id: str) -> InventoryFunctionWrappers:

@@ -29,7 +29,7 @@ export function useChat(onInventoryUpdate?: () => void) {
   const [isLoading, setIsLoading] = useState(false);
   const [currentBin, setCurrentBin] = useState<string>('');
 
-  const sendMessage = useCallback(async (text: string) => {
+  const sendMessage = useCallback(async (text: string, isMicrophoneActive: boolean = false) => {
     if (!text.trim() || isLoading) return;
 
     // Add user message immediately
@@ -37,16 +37,18 @@ export function useChat(onInventoryUpdate?: () => void) {
       id: Date.now(),
       text,
       sender: 'user' as const,
-      timestamp: new Date().toLocaleTimeString('en-US', { 
-        hour: 'numeric', 
-        minute: '2-digit' 
+      timestamp: new Date().toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit'
       })
     };
     setMessages(prev => [...prev, userMessage]);
     setIsLoading(true);
 
     try {
-      const response = await apiClient.sendChatMessage(text);
+      // Use TTS format if microphone is active, otherwise use MD format
+      const format = isMicrophoneActive ? 'TTS' : 'MD';
+      const response = await apiClient.sendChatMessage(text, format);
       
       // Add bot response
       const botMessage = {
@@ -89,13 +91,15 @@ export function useChat(onInventoryUpdate?: () => void) {
     }
   }, [isLoading]);
 
-  const uploadImage = useCallback(async (file: File) => {
+  const uploadImage = useCallback(async (file: File, isMicrophoneActive: boolean = false) => {
     if (isLoading) return;
 
     setIsLoading(true);
 
     try {
-      const response = await apiClient.uploadImage(file);
+      // Use TTS format if microphone is active, otherwise use MD format
+      const format = isMicrophoneActive ? 'TTS' : 'MD';
+      const response = await apiClient.uploadImage(file, format);
       
       // Add image upload message
       const imageMessage = {
@@ -109,21 +113,8 @@ export function useChat(onInventoryUpdate?: () => void) {
       };
       setMessages(prev => [...prev, imageMessage]);
 
-      // Create bot response from analyzed items
-      let botResponseText = '';
-      if (response.analyzed_items && response.analyzed_items.length > 0) {
-        botResponseText = `📷 **Image Analysis Complete!**\n\nI found **${response.analyzed_items.length}** items:\n\n`;
-        response.analyzed_items.forEach((item, index) => {
-          botResponseText += `${index + 1}. **${item.name}**`;
-          if (item.description) {
-            botResponseText += ` - ${item.description}`;
-          }
-          botResponseText += '\n';
-        });
-        botResponseText += '\nYou can now ask me to add these items to a specific bin!';
-      } else {
-        botResponseText = '📷 Image uploaded successfully, but I couldn\'t identify any specific items. You can still ask me to add items manually.';
-      }
+      // Use the conversational response from the API
+      const botResponseText = response.response || 'Image analysis completed.';
 
       const botMessage = {
         id: Date.now() + 1,

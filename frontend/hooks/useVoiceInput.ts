@@ -15,6 +15,7 @@ interface VoiceInputOptions {
 interface VoiceInputState {
   isSupported: boolean;
   isListening: boolean;
+  isMicrophoneActive: boolean;  // Tracks if mic button is "on" (user intent)
   hasPermission: boolean;
   currentTranscript: string;
   error: string | null;
@@ -31,6 +32,7 @@ export function useVoiceInput(options: VoiceInputOptions = {}) {
   const [state, setState] = useState<VoiceInputState>({
     isSupported: checkVoiceSupport(),
     isListening: false,
+    isMicrophoneActive: false,
     hasPermission: false,
     currentTranscript: '',
     error: null
@@ -161,12 +163,16 @@ export function useVoiceInput(options: VoiceInputOptions = {}) {
 
   // Toggle listening
   const toggleListening = useCallback(() => {
-    if (state.isListening) {
+    if (state.isMicrophoneActive) {
+      // Turn off microphone
+      setState(prev => ({ ...prev, isMicrophoneActive: false }));
       stopListening();
     } else {
+      // Turn on microphone
+      setState(prev => ({ ...prev, isMicrophoneActive: true }));
       startListening();
     }
-  }, [state.isListening, startListening, stopListening]);
+  }, [state.isMicrophoneActive, startListening, stopListening]);
 
   // Reset transcript
   const resetTranscript = useCallback(() => {

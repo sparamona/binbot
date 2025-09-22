@@ -1,16 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
 import Button from './Button';
-import { SendIcon, CameraIcon, MicIcon } from './icons';
+import { SendIcon, CameraIcon, MicIcon, StopIcon } from './icons';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 
 interface ChatInputProps {
-  onSendMessage: (text: string) => void;
+  onSendMessage: (text: string, isVoiceInput?: boolean) => void;
   onCameraClick: () => void;
   disabled?: boolean;
   onVoiceStateChange?: (isListening: boolean) => void;
+  isTTSSpeaking?: boolean;
+  onTTSStop?: () => void;
 }
 
-const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onCameraClick, disabled = false, onVoiceStateChange }) => {
+const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onCameraClick, disabled = false, onVoiceStateChange, isTTSSpeaking = false, onTTSStop }) => {
   const [text, setText] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -23,7 +25,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onCameraClick, dis
     onFinalResult: (finalTranscript) => {
       // Auto-submit when user pauses speaking
       if (finalTranscript.trim()) {
-        onSendMessage(finalTranscript.trim());
+        onSendMessage(finalTranscript.trim(), true); // Mark as voice input
         setText('');
         // Refocus input after voice submission
         setTimeout(() => {
@@ -40,7 +42,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onCameraClick, dis
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (disabled || !text.trim()) return;
-    onSendMessage(text);
+    onSendMessage(text, false); // Mark as manual input
     setText('');
 
     // Refocus the input after sending message
@@ -59,9 +61,9 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onCameraClick, dis
   // Notify parent about voice input state changes
   useEffect(() => {
     if (onVoiceStateChange) {
-      onVoiceStateChange(voiceInput.isListening);
+      onVoiceStateChange(voiceInput.isMicrophoneActive);
     }
-  }, [voiceInput.isListening, onVoiceStateChange]);
+  }, [voiceInput.isMicrophoneActive, onVoiceStateChange]);
 
   return (
     <div className="p-4 bg-white border-t border-slate-200">
@@ -70,13 +72,25 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onCameraClick, dis
             <Button
               type="button"
               variant="ghost"
-              className={`p-1 ${voiceInput.isListening ? 'bg-red-100 text-red-600' : ''}`}
-              aria-label={voiceInput.isListening ? "Stop voice input" : "Start voice input"}
-              onClick={voiceInput.toggleListening}
-              disabled={disabled || !voiceInput.isSupported}
-              title={!voiceInput.isSupported ? "Voice input not supported in this browser" : undefined}
+              className={`p-1 ${voiceInput.isMicrophoneActive ? 'bg-red-100 text-red-600' : ''} ${isTTSSpeaking ? 'bg-blue-100 text-blue-600' : ''}`}
+              aria-label={
+                isTTSSpeaking ? "Stop speech playback" :
+                voiceInput.isMicrophoneActive ? "Turn off microphone" :
+                "Turn on microphone"
+              }
+              onClick={isTTSSpeaking ? onTTSStop : voiceInput.toggleListening}
+              disabled={disabled || (!voiceInput.isSupported && !isTTSSpeaking)}
+              title={
+                isTTSSpeaking ? "Click to stop speech playback" :
+                !voiceInput.isSupported ? "Voice input not supported in this browser" :
+                undefined
+              }
             >
-                <MicIcon className={`w-5 h-5 ${voiceInput.isListening ? 'text-red-600' : 'text-slate-500'}`} />
+                {isTTSSpeaking ? (
+                  <StopIcon className="w-5 h-5 text-blue-600" />
+                ) : (
+                  <MicIcon className={`w-5 h-5 ${voiceInput.isMicrophoneActive ? 'text-red-600' : 'text-slate-500'}`} />
+                )}
             </Button>
         </div>
         <input

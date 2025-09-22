@@ -95,6 +95,7 @@ class ImageUploadResponse(BaseModel):
     success: bool
     image_id: str
     analyzed_items: List[ItemInput]
+    response: Optional[str] = None  # Conversational response about the analysis
 
 
 class HealthResponse(BaseModel):

@@ -7,13 +7,15 @@ import { useApiStatus } from '../hooks/useApi';
 
 interface ChatPanelProps {
   messages: Message[];
-  onSendMessage: (text: string) => void;
+  onSendMessage: (text: string, isVoiceInput?: boolean) => void;
   onCameraClick: () => void;
   isLoading?: boolean;
   onVoiceStateChange?: (isListening: boolean) => void;
+  isTTSSpeaking?: boolean;
+  onTTSStop?: () => void;
 }
 
-const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, onCameraClick, isLoading = false, onVoiceStateChange }) => {
+const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, onCameraClick, isLoading = false, onVoiceStateChange, isTTSSpeaking = false, onTTSStop }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { isConnected } = useApiStatus();
 
@@ -77,6 +79,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, onCamera
         onCameraClick={onCameraClick}
         disabled={isLoading || !isConnected}
         onVoiceStateChange={onVoiceStateChange}
+        isTTSSpeaking={isTTSSpeaking}
+        onTTSStop={onTTSStop}
       />
     </div>
   );

@@ -16,7 +16,9 @@ const App: React.FC = () => {
 
   // Voice input tracking state
   const [isVoiceInputActive, setIsVoiceInputActive] = useState(false);
+  const [wasLastMessageVoice, setWasLastMessageVoice] = useState(false);
   const lastBotMessageRef = useRef<string>('');
+  const micActivationTimeRef = useRef<number>(0);
 
   // Text-to-speech functionality
   const tts = useTextToSpeech({
@@ -38,16 +40,28 @@ const App: React.FC = () => {
     }
   }, [currentBin, currentBinState]);
 
-  // Auto-speak bot responses when voice input was used
+  // Track when microphone is activated to avoid reading old messages
   useEffect(() => {
-    if (messages.length > 0) {
+    if (isVoiceInputActive) {
+      micActivationTimeRef.current = Date.now();
+    }
+  }, [isVoiceInputActive]);
+
+  // Auto-speak bot responses only for NEW messages after microphone activation
+  useEffect(() => {
+    if (messages.length > 0 && isVoiceInputActive) {
       const lastMessage = messages[messages.length - 1];
       if (lastMessage.sender === 'bot' &&
-          lastMessage.text !== lastBotMessageRef.current &&
-          isVoiceInputActive) {
-        // Speak the bot response
-        tts.speak(lastMessage.text);
-        lastBotMessageRef.current = lastMessage.text;
+          lastMessage.text !== lastBotMessageRef.current) {
+
+        // Only speak if this message arrived after microphone was activated
+        // Use message ID as a proxy for message timestamp (higher ID = newer message)
+        const messageTime = lastMessage.id;
+        if (messageTime > micActivationTimeRef.current) {
+          // Speak the bot response
+          tts.speak(lastMessage.text);
+          lastBotMessageRef.current = lastMessage.text;
+        }
       }
     }
   }, [messages, isVoiceInputActive, tts]);
@@ -60,11 +74,14 @@ const App: React.FC = () => {
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
-  const handleSendMessage = async (text: string) => {
+  const handleSendMessage = async (text: string, isVoiceInput: boolean = false) => {
     if (!text.trim()) return;
 
-    // Use real API to send message
-    await sendMessage(text);
+    // Track if this message was from voice input
+    setWasLastMessageVoice(isVoiceInput);
+
+    // Use real API to send message with format based on microphone state (not just voice input)
+    await sendMessage(text, isVoiceInputActive);
 
     // Reload inventory after any chat response
     reloadInventory();
@@ -83,8 +100,8 @@ const App: React.FC = () => {
     try {
       setError(null);
 
-      // Upload image and get analysis
-      const response = await uploadImage(file);
+      // Upload image and get analysis - use microphone state for format selection
+      const response = await uploadImage(file, isVoiceInputActive);
 
       if (response.success) {
         // Reload inventory to show any new items
@@ -148,6 +165,8 @@ const App: React.FC = () => {
             onCameraClick={toggleCamera}
             isLoading={isLoading}
             onVoiceStateChange={setIsVoiceInputActive}
+            isTTSSpeaking={tts.isSpeaking}
+            onTTSStop={tts.stopSpeaking}
           />
         </div>
 

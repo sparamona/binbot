@@ -84,10 +84,13 @@ class ApiClient {
   /**
    * Send chat message to backend
    */
-  async sendChatMessage(message: string): Promise<ChatResponse> {
+  async sendChatMessage(message: string, format: 'MD' | 'TTS' = 'MD'): Promise<ChatResponse> {
     await this.ensureSession();
 
-    const response = await fetch(`${this.baseUrl}/api/chat/command`, {
+    // Add format as query parameter
+    const url = `${this.baseUrl}/api/chat/command?fmt=${format}`;
+
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -106,13 +109,16 @@ class ApiClient {
   /**
    * Upload image to backend
    */
-  async uploadImage(file: File): Promise<ImageUploadResponse> {
+  async uploadImage(file: File, format: 'MD' | 'TTS' = 'MD'): Promise<ImageUploadResponse> {
     await this.ensureSession();
 
     const formData = new FormData();
     formData.append('file', file);
 
-    const response = await fetch(`${this.baseUrl}/api/chat/image`, {
+    // Add format as query parameter
+    const url = `${this.baseUrl}/api/chat/image?fmt=${format}`;
+
+    const response = await fetch(url, {
       method: 'POST',
       credentials: 'include',
       body: formData

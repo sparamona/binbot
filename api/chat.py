@@ -2,8 +2,9 @@
 Chat endpoints for BinBot
 """
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Request
+from fastapi import APIRouter, HTTPException, UploadFile, File, Request, Query
 from pydantic import BaseModel
+from typing import Literal, Optional
 import tempfile
 import os
 from pathlib import Path
@@ -35,10 +36,18 @@ def create_function_mapping(wrappers):
 class ChatCommandRequest(BaseModel):
     """Request for chat command (message only, session from cookie)"""
     message: str
+    fmt: Optional[Literal["MD", "TTS"]] = "MD"
 
 @router.post("/api/chat/command", response_model=ChatResponse)
-async def chat(chat_request: ChatCommandRequest, request: Request):
+async def chat(
+    chat_request: ChatCommandRequest,
+    request: Request,
+    fmt: Optional[Literal["MD", "TTS"]] = Query("MD", description="Response format: MD for markdown, TTS for text-to-speech")
+):
     """Chat with LLM using session-bound functions and automatic execution"""
+    # Log request details for debugging
+    logger.info(f"CHAT_REQUEST: {request.method} {request.url} - Query params: {dict(request.query_params)} - Body fmt: {chat_request.fmt}")
+
     # Get session ID from cookie
     session_id = request.cookies.get('session_id')
     if not session_id:
@@ -50,8 +59,19 @@ async def chat(chat_request: ChatCommandRequest, request: Request):
     if not session:
         raise HTTPException(status_code=404, detail="Session not found or expired")
 
-    # Add user message to conversation
-    session_manager.add_message(session_id, "user", chat_request.message + "\n\n The contents of any bin change at any time without your knowledge.  Remember to abide by system instructions.  Always use the tools provided whenever possible.  Never rely on your memory for bin contents.  ALWAYS use get_bin_contents to retrieve the contents of a bin.")
+    # Use format from query parameter if provided, otherwise from request body
+    response_format = fmt or chat_request.fmt
+
+    # Add user message to conversation with format-specific instructions
+    base_instructions = "\n\n The contents of any bin change at any time without your knowledge.  Remember to abide by system instructions.  Always use the tools provided whenever possible.  Never rely on your memory for bin contents.  ALWAYS use get_bin_contents to retrieve the contents of a bin."
+
+    if response_format == "TTS":
+        format_instructions = "\nRespond in a conversational, natural way suitable for text-to-speech. Keep responses short and avoid markdown formatting."
+    else:
+        format_instructions = ""  # No special instructions for MD format
+
+    full_message = chat_request.message + base_instructions + format_instructions
+    session_manager.add_message(session_id, "user", full_message)
     
     # Get conversation history
     conversation = session_manager.get_conversation(session_id)
@@ -76,7 +96,7 @@ async def chat(chat_request: ChatCommandRequest, request: Request):
 
     try:
         # Send to LLM with automatic function calling enabled
-        response_text = llm_client.chat_completion(messages, tools)
+        response_text = llm_client.chat_completion(messages, tools, response_format)
 
         # Add model response to conversation
         session_manager.add_message(session_id, "model", response_text)
@@ -102,9 +122,13 @@ async def chat(chat_request: ChatCommandRequest, request: Request):
 @router.post("/api/chat/image", response_model=ImageUploadResponse)
 async def chat_image(
     request: Request,
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    fmt: Optional[Literal["MD", "TTS"]] = Query("MD", description="Response format: MD for markdown, TTS for text-to-speech")
 ):
     """Upload image, analyze contents, and add to session context"""
+    # Log request details for debugging
+    logger.info(f"IMAGE_REQUEST: {request.method} {request.url} - Query params: {dict(request.query_params)} - File: {file.filename}")
+
     # Get session ID from cookie
     session_id = request.cookies.get('session_id')
     if not session_id:
@@ -157,11 +181,37 @@ async def chat_image(
 
         session_manager.add_message(session_id, "user", f"[Image uploaded: {file.filename}]")
         session_manager.add_message(session_id, "model", analysis_summary)
-        
+
+        # Generate format-appropriate conversational response
+        if fmt == "TTS":
+            # Short, conversational response for TTS
+            if len(analyzed_items) == 0:
+                conversational_response = "I analyzed the image but didn't find any recognizable items."
+            elif len(analyzed_items) == 1:
+                item = analyzed_items[0]
+                conversational_response = f"I found one item in the image: {item.name}."
+            else:
+                item_names = [item.name for item in analyzed_items]
+                if len(item_names) <= 3:
+                    items_text = ", ".join(item_names[:-1]) + f" and {item_names[-1]}"
+                else:
+                    items_text = f"{', '.join(item_names[:2])} and {len(item_names)-2} other items"
+                conversational_response = f"I found {len(analyzed_items)} items in the image: {items_text}."
+        else:
+            # Rich markdown response for MD format
+            if len(analyzed_items) == 0:
+                conversational_response = "## 📷 Image Analysis Complete\n\n**No items found** in the uploaded image."
+            else:
+                conversational_response = f"## 📷 Image Analysis Complete\n\n**Found {len(analyzed_items)} item{'s' if len(analyzed_items) != 1 else ''}:**\n\n"
+                for item in analyzed_items:
+                    conversational_response += f"- **{item.name}**: {item.description}\n"
+                conversational_response += f"\n*Ready to add to inventory when you specify a bin.*"
+
         return ImageUploadResponse(
             success=True,
             image_id=image_id,
-            analyzed_items=analyzed_items
+            analyzed_items=analyzed_items,
+            response=conversational_response
         )
         
     except Exception as e:

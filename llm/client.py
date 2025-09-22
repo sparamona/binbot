@@ -7,7 +7,7 @@ from google.genai import types
 from typing import List, Dict, Any
 
 from config.settings import GEMINI_API_KEY
-from llm.prompts import SYSTEM_INSTRUCTIONS
+from llm.prompts import SYSTEM_INSTRUCTIONS, TTS_SYSTEM_INSTRUCTIONS
 
 # Model configuration
 GEMINI_MODEL = "gemini-2.5-flash"
@@ -23,10 +23,13 @@ class GeminiClient:
         """Create a fresh Gemini client for each request"""
         return genai.Client(api_key=GEMINI_API_KEY)
 
-    def chat_completion(self, messages: List[Dict[str, str]], tools: List = None) -> str:
+    def chat_completion(self, messages: List[Dict[str, str]], tools: List = None, format_type: str = "MD") -> str:
         """Send messages to Gemini and get response with automatic function calling using new SDK"""
         # Create fresh client for this request
         client = self._create_client()
+
+        # Choose system instructions based on format type
+        system_instructions = TTS_SYSTEM_INSTRUCTIONS if format_type == "TTS" else SYSTEM_INSTRUCTIONS
 
         # Separate the last message (current prompt) from history
         if not messages:
@@ -58,7 +61,7 @@ class GeminiClient:
                     function_calling_config=types.FunctionCallingConfig(
                         mode='AUTO'
                     )                ),
-                system_instruction=SYSTEM_INSTRUCTIONS,
+                system_instruction=system_instructions,
                 temperature=0.0
             )
 
@@ -71,7 +74,7 @@ class GeminiClient:
         else:
             # Simple text generation with system instructions
             config = types.GenerateContentConfig(
-                system_instruction=SYSTEM_INSTRUCTIONS
+                system_instruction=system_instructions
             )
 
             response = client.models.generate_content(
