@@ -48,6 +48,7 @@ export function useChat(onInventoryUpdate?: () => void) {
     try {
       // Use TTS format if microphone is active, otherwise use MD format
       const format = isMicrophoneActive ? 'TTS' : 'MD';
+      console.log('🎤 DEBUG: sendMessage called with isMicrophoneActive:', isMicrophoneActive, 'format:', format);
       const response = await apiClient.sendChatMessage(text, format);
       
       // Add bot response

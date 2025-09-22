@@ -7,7 +7,7 @@ import { useState, useRef, useCallback } from 'react';
 
 interface VoiceInputOptions {
   onResult?: (transcript: string) => void;
-  onFinalResult?: (finalTranscript: string) => void;
+  onFinalResult?: (finalTranscript: string, isMicrophoneActive: boolean) => void;
   onError?: (error: string) => void;
   language?: string;
 }
@@ -40,6 +40,7 @@ export function useVoiceInput(options: VoiceInputOptions = {}) {
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const finalTranscriptRef = useRef<string>('');
+  const isMicrophoneActiveRef = useRef<boolean>(false); // Track current microphone state
 
   // Check if browser supports speech recognition
   function checkVoiceSupport(): boolean {
@@ -106,7 +107,7 @@ export function useVoiceInput(options: VoiceInputOptions = {}) {
       if (finalTranscript && onFinalResult) {
         const fullFinalTranscript = finalTranscriptRef.current.trim();
         if (fullFinalTranscript) {
-          onFinalResult(fullFinalTranscript);
+          onFinalResult(fullFinalTranscript, isMicrophoneActiveRef.current);
           finalTranscriptRef.current = ''; // Reset after sending
         }
       }
@@ -121,6 +122,7 @@ export function useVoiceInput(options: VoiceInputOptions = {}) {
     };
 
     recognition.onend = () => {
+      console.log('🎤 DEBUG: Speech recognition ended, current isMicrophoneActive:', state.isMicrophoneActive);
       setState(prev => ({ ...prev, isListening: false }));
     };
 
@@ -130,6 +132,7 @@ export function useVoiceInput(options: VoiceInputOptions = {}) {
 
   // Start listening
   const startListening = useCallback(async () => {
+    console.log('🎤 DEBUG: startListening called, current isMicrophoneActive:', state.isMicrophoneActive);
     try {
       if (!state.hasPermission) {
         await requestPermission();
@@ -143,6 +146,7 @@ export function useVoiceInput(options: VoiceInputOptions = {}) {
         setState(prev => ({ ...prev, isListening: true, error: null, currentTranscript: '' }));
         finalTranscriptRef.current = '';
         recognitionRef.current.start();
+        console.log('🎤 DEBUG: Speech recognition started');
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to start listening';
@@ -163,12 +167,17 @@ export function useVoiceInput(options: VoiceInputOptions = {}) {
 
   // Toggle listening
   const toggleListening = useCallback(() => {
+    console.log('🎤 DEBUG: toggleListening called, current isMicrophoneActive:', state.isMicrophoneActive);
     if (state.isMicrophoneActive) {
       // Turn off microphone
+      console.log('🎤 DEBUG: Turning OFF microphone');
+      isMicrophoneActiveRef.current = false;
       setState(prev => ({ ...prev, isMicrophoneActive: false }));
       stopListening();
     } else {
       // Turn on microphone
+      console.log('🎤 DEBUG: Turning ON microphone');
+      isMicrophoneActiveRef.current = true;
       setState(prev => ({ ...prev, isMicrophoneActive: true }));
       startListening();
     }

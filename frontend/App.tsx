@@ -74,14 +74,17 @@ const App: React.FC = () => {
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
-  const handleSendMessage = async (text: string, isVoiceInput: boolean = false) => {
+  const handleSendMessage = async (text: string, isVoiceInput: boolean = false, forceMicrophoneActive?: boolean) => {
     if (!text.trim()) return;
 
     // Track if this message was from voice input
     setWasLastMessageVoice(isVoiceInput);
 
-    // Use real API to send message with format based on microphone state (not just voice input)
-    await sendMessage(text, isVoiceInputActive);
+    // Use forceMicrophoneActive if provided, otherwise fall back to isVoiceInputActive
+    const microphoneActive = forceMicrophoneActive !== undefined ? forceMicrophoneActive : isVoiceInputActive;
+    console.log('🎤 DEBUG: handleSendMessage - isVoiceInput:', isVoiceInput, 'forceMicrophoneActive:', forceMicrophoneActive, 'microphoneActive:', microphoneActive);
+    // Use real API to send message with format based on microphone state
+    await sendMessage(text, microphoneActive);
 
     // Reload inventory after any chat response
     reloadInventory();
