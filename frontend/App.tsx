@@ -40,6 +40,25 @@ const App: React.FC = () => {
     setIsCameraOpen(!isCameraOpen);
   };
 
+  const handleImageCapture = async (file: File) => {
+    try {
+      setError(null);
+
+      // Upload image and get analysis
+      const response = await uploadImage(file);
+
+      if (response.success) {
+        // Reload inventory to show any new items
+        reloadInventory();
+
+        // Switch to inventory tab to show results
+        setActiveTab('inventory');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to upload image');
+    }
+  };
+
   const handleImageSelect = (url: string) => {
     setSelectedImage(url);
   };
@@ -49,7 +68,7 @@ const App: React.FC = () => {
   };
 
   const currentBinInfo = {
-    name: currentBin ? `Bin ${currentBin}` : 'No bin selected',
+    name: currentBin ? `BIN ${currentBin.toUpperCase()}` : 'No bin selected',
     lastUpdated: lastUpdated || 'Never'
   };
   
@@ -97,7 +116,7 @@ const App: React.FC = () => {
         </div>
 
       </main>
-      {isCameraOpen && <CameraModal onClose={toggleCamera} />}
+      {isCameraOpen && <CameraModal onClose={toggleCamera} onImageCapture={handleImageCapture} />}
       {selectedImage && <ImageModal imageUrl={selectedImage} onClose={handleCloseImageModal} />}
     </div>
   );

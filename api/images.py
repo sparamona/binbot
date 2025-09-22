@@ -110,11 +110,11 @@ async def analyze_image(image_id: str, request: ImageAnalysisRequest):
     )
 
 
-@router.get("/images/{image_id}")
+@router.get("/api/images/{image_id}")
 async def get_image(image_id: str):
     """Serve stored image asset"""
     image_storage = get_image_storage()
-    
+
     # Check if image exists
     image_metadata = image_storage.get_image_metadata(image_id)
     if not image_metadata:

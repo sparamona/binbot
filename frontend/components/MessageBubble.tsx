@@ -15,7 +15,9 @@ const MarkdownRenderer: React.FC<{ text: string; isBot: boolean }> = ({ text, is
   }
 
   // Bot messages use full markdown rendering
-  const htmlContent = marked.parse(text);
+  // Ensure text is not null/undefined
+  const safeText = text || '';
+  const htmlContent = marked.parse(safeText);
 
   return (
     <div

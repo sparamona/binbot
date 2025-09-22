@@ -3,7 +3,8 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { apiClient, type ChatResponse, type ImageUploadResponse, type InventoryItem } from '../services/api';
+import { apiClient, type ChatResponse, type ImageUploadResponse } from '../services/api';
+import type { InventoryItem } from '../types';
 
 /**
  * Hook for managing chat functionality
@@ -108,14 +109,29 @@ export function useChat(onInventoryUpdate?: () => void) {
       };
       setMessages(prev => [...prev, imageMessage]);
 
-      // Add bot response
+      // Create bot response from analyzed items
+      let botResponseText = '';
+      if (response.analyzed_items && response.analyzed_items.length > 0) {
+        botResponseText = `📷 **Image Analysis Complete!**\n\nI found **${response.analyzed_items.length}** items:\n\n`;
+        response.analyzed_items.forEach((item, index) => {
+          botResponseText += `${index + 1}. **${item.name}**`;
+          if (item.description) {
+            botResponseText += ` - ${item.description}`;
+          }
+          botResponseText += '\n';
+        });
+        botResponseText += '\nYou can now ask me to add these items to a specific bin!';
+      } else {
+        botResponseText = '📷 Image uploaded successfully, but I couldn\'t identify any specific items. You can still ask me to add items manually.';
+      }
+
       const botMessage = {
         id: Date.now() + 1,
-        text: response.response,
+        text: botResponseText,
         sender: 'bot' as const,
-        timestamp: new Date().toLocaleTimeString('en-US', { 
-          hour: 'numeric', 
-          minute: '2-digit' 
+        timestamp: new Date().toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit'
         })
       };
       setMessages(prev => [...prev, botMessage]);
@@ -177,7 +193,17 @@ export function useInventory(binId: string) {
 
     try {
       const response = await apiClient.getBinContents(binId);
-      setItems(response.items);
+
+      // Transform API items to React component format
+      const transformedItems = response.items.map(item => ({
+        id: item.id,
+        name: item.name,
+        description: item.description,
+        createdAt: item.created_at, // Map created_at to createdAt
+        thumbnailUrl: item.image_id ? `/api/images/${item.image_id}` : undefined // Map image_id to thumbnailUrl
+      }));
+
+      setItems(transformedItems);
       setLastUpdated(new Date().toLocaleString());
     } catch (error) {
       console.error('Failed to load bin contents:', error);

@@ -61,11 +61,11 @@ class ChromaDBClient:
                 doc_text += f" {item['description']}"
             documents.append(doc_text)
 
-            # Simple metadata
+            # Simple metadata (normalize bin_id to lowercase)
             metadata = {
                 'name': item['name'],
                 'description': item.get('description', ''),
-                'bin_id': item['bin_id'],
+                'bin_id': item['bin_id'].lower(),  # Store bin_id in lowercase
                 'created_at': item['created_at'],
                 'image_id': item.get('image_id', '')  # Single image per item
             }
@@ -126,16 +126,18 @@ class ChromaDBClient:
         self._collection.delete(ids=[item_id])
     
     def update_item_bin(self, item_id: str, new_bin_id: str):
-        """Update an item's bin location"""
+        """Update an item's bin location (case-insensitive)"""
         existing = self._collection.get(ids=[item_id])
         if existing['ids']:
             metadata = existing['metadatas'][0]
-            metadata['bin_id'] = new_bin_id
+            metadata['bin_id'] = new_bin_id.lower()  # Normalize to lowercase
             self._collection.update(ids=[item_id], metadatas=[metadata])
     
     def get_bin_contents(self, bin_id: str):
-        """Get all items in a specific bin"""
-        results = self._collection.get(where={"bin_id": bin_id})
+        """Get all items in a specific bin (case-insensitive)"""
+        # Normalize bin_id to lowercase for case-insensitive matching
+        normalized_bin_id = bin_id.lower()
+        results = self._collection.get(where={"bin_id": normalized_bin_id})
 
         items = []
         if results['ids']:
@@ -145,7 +147,7 @@ class ChromaDBClient:
                     'id': item_id,
                     'name': metadata['name'],
                     'description': metadata.get('description', ''),
-                    'bin_id': metadata['bin_id'],
+                    'bin_id': metadata['bin_id'],  # Return the normalized bin_id
                     'created_at': metadata['created_at'],
                     'image_id': metadata.get('image_id', '')
                 }
