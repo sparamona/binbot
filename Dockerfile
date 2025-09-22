@@ -1,52 +1,25 @@
-# Use Python 3.11 as base image
-FROM python:3.11-slim
+FROM python:3.12-slim
 
-# Set working directory
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
+# Install Node.js (using NodeSource for current 18.x version, better than apt's outdated version)
+RUN apt-get update && apt-get install -y curl && \
+    curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
+    apt-get install -y nodejs && \
+    rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for better caching
-COPY requirements.txt .
+# Install UV
+RUN pip install uv
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy dependencies
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen
 
-# Copy application files
-COPY app.py .
-COPY config.yaml .
-COPY api_schemas.py .
-COPY frontend/ ./frontend/
-COPY start.sh .
+# Copy app
+COPY . .
 
-# Copy modular code structure
-COPY config/ ./config/
-COPY database/ ./database/
-COPY llm/ ./llm/
-COPY api/ ./api/
-COPY session/ ./session/
-COPY nlp/ ./nlp/
-COPY storage/ ./storage/
-COPY utils/ ./utils/
+# Build frontend
+RUN cd frontend && npm install && npm run build
 
-# Make start script executable
-RUN chmod +x start.sh
-
-# Create data directory for ChromaDB persistence
-RUN mkdir -p /app/data/chromadb
-
-# Create directory for image storage
-RUN mkdir -p /app/data/images
-
-# Expose port
 EXPOSE 8000
-
-# Set environment variables
-ENV PYTHONPATH=/app
-ENV PYTHONUNBUFFERED=1
-
-# Use start script as entry point
-CMD ["./start.sh"]
+CMD ["uv", "run", "python", "run_prod.py"]

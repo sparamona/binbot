@@ -1,148 +1,112 @@
 """
-Session Management for BinBot
-Handles user sessions and context state for multi-turn conversations
+Simple in-memory session management for BinBot
 """
 
 import uuid
-import time
-from typing import Dict, Optional, Any
-from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from typing import Dict, List, Optional
 
+from config.settings import SESSION_TTL_MINUTES
+from utils.logging import setup_logger
 
-@dataclass
-class SessionContext:
-    """Represents the context state for a user session"""
-    session_id: str
-    current_bin_id: Optional[str] = None
-    last_activity: datetime = field(default_factory=datetime.now)
-    created_at: datetime = field(default_factory=datetime.now)
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    
-    def update_activity(self):
-        """Update the last activity timestamp"""
-        self.last_activity = datetime.now()
-    
-    def is_expired(self, timeout_minutes: int = 30) -> bool:
-        """Check if the session has expired"""
-        expiry_time = self.last_activity + timedelta(minutes=timeout_minutes)
-        return datetime.now() > expiry_time
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert session context to dictionary for API responses"""
-        return {
-            "session_id": self.session_id,
-            "current_bin_id": self.current_bin_id,
-            "last_activity": self.last_activity.isoformat(),
-            "created_at": self.created_at.isoformat(),
-            "metadata": self.metadata
-        }
+# Set up logger for session management
+logger = setup_logger(__name__)
 
 
 class SessionManager:
-    """Manages user sessions and context state"""
+    """Simple in-memory session store with TTL"""
     
-    def __init__(self, default_timeout_minutes: int = 30):
-        self.sessions: Dict[str, SessionContext] = {}
-        self.default_timeout_minutes = default_timeout_minutes
+    def __init__(self):
+        self._sessions: Dict[str, Dict] = {}
     
-    def create_session(self, session_id: Optional[str] = None) -> SessionContext:
-        """Create a new session or return existing one"""
-        if session_id is None:
-            session_id = str(uuid.uuid4())
-        
-        if session_id in self.sessions:
-            # Update existing session activity
-            session = self.sessions[session_id]
-            session.update_activity()
-            return session
-        
-        # Create new session
-        session = SessionContext(session_id=session_id)
-        self.sessions[session_id] = session
+    def new_session(self) -> str:
+        """Create a new session and return session ID"""
+        session_id = str(uuid.uuid4())
+        now = datetime.now()
+
+        self._sessions[session_id] = {
+            'session_id': session_id,
+            'created_at': now,
+            'last_accessed': now,
+            'current_bin': '',
+            'conversation': []
+        }
+
+        logger.info(f"NEW_SESSION created: {session_id[:8]}... (current_bin: '')")
+        return session_id
+    
+    def get_session(self, session_id: str) -> Optional[Dict]:
+        """Get session data if it exists and hasn't expired"""
+        if session_id not in self._sessions:
+            logger.warning(f"GET_SESSION: Session {session_id[:8]}... not found")
+            return None
+
+        session = self._sessions[session_id]
+
+        # Check if expired
+        if self._is_expired(session):
+            logger.info(f"GET_SESSION: Session {session_id[:8]}... expired, removing")
+            del self._sessions[session_id]
+            return None
+
+        # Update last accessed
+        session['last_accessed'] = datetime.now()
+        logger.debug(f"GET_SESSION: {session_id[:8]}... (current_bin: '{session['current_bin']}')")
         return session
     
-    def get_session(self, session_id: str) -> Optional[SessionContext]:
-        """Get an existing session by ID"""
-        if session_id not in self.sessions:
-            return None
-        
-        session = self.sessions[session_id]
-        
-        # Check if session has expired
-        if session.is_expired(self.default_timeout_minutes):
-            self.delete_session(session_id)
-            return None
-        
-        # Update activity and return
-        session.update_activity()
-        return session
+    def end_session(self, session_id: str):
+        """Remove a session"""
+        if session_id in self._sessions:
+            del self._sessions[session_id]
     
-    def get_or_create_session(self, session_id: Optional[str] = None) -> SessionContext:
-        """Get existing session or create new one"""
-        if session_id and session_id in self.sessions:
-            session = self.get_session(session_id)
-            if session:
-                return session
-        
-        return self.create_session(session_id)
-    
-    def update_session_context(self, session_id: str, **kwargs) -> Optional[SessionContext]:
-        """Update session context with new values"""
+    def set_current_bin(self, session_id: str, bin_id: str):
+        """Set the current bin for a session"""
         session = self.get_session(session_id)
-        if not session:
-            return None
+        if session:
+            old_bin = session['current_bin']
+            session['current_bin'] = bin_id
+            logger.info(f"SET_CURRENT_BIN: {session_id[:8]}... '{old_bin}' → '{bin_id}'")
+        else:
+            logger.error(f"SET_CURRENT_BIN: Failed - session {session_id[:8]}... not found or expired")
         
-        # Update context fields
-        for key, value in kwargs.items():
-            if hasattr(session, key):
-                setattr(session, key, value)
-            else:
-                session.metadata[key] = value
-        
-        session.update_activity()
-        return session
     
-    def set_current_bin(self, session_id: str, bin_id: Optional[str]) -> Optional[SessionContext]:
-        """Set the current bin context for a session"""
-        return self.update_session_context(session_id, current_bin_id=bin_id)
-    
-    def get_current_bin(self, session_id: str) -> Optional[str]:
-        """Get the current bin context for a session"""
+    def add_message(self, session_id: str, role: str, content: str):
+        """Add a message to the conversation"""
         session = self.get_session(session_id)
-        return session.current_bin_id if session else None
+        if session:
+            session['conversation'].append({
+                'role': role,
+                'content': content,
+                'timestamp': datetime.now().isoformat()
+            })
     
-    def delete_session(self, session_id: str) -> bool:
-        """Delete a session"""
-        if session_id in self.sessions:
-            del self.sessions[session_id]
-            return True
-        return False
+    def get_conversation(self, session_id: str) -> List[Dict]:
+        """Get conversation history"""
+        session = self.get_session(session_id)
+        return session['conversation'] if session else []
     
-    def cleanup_expired_sessions(self) -> int:
-        """Remove all expired sessions and return count of removed sessions"""
-        expired_sessions = []
+    def cleanup_expired_sessions(self):
+        """Remove expired sessions"""
+        expired_ids = []
+        for session_id, session in self._sessions.items():
+            if self._is_expired(session):
+                expired_ids.append(session_id)
         
-        for session_id, session in self.sessions.items():
-            if session.is_expired(self.default_timeout_minutes):
-                expired_sessions.append(session_id)
+        for session_id in expired_ids:
+            del self._sessions[session_id]
         
-        for session_id in expired_sessions:
-            del self.sessions[session_id]
-        
-        return len(expired_sessions)
+        return len(expired_ids)
     
-    def get_all_sessions(self) -> Dict[str, SessionContext]:
-        """Get all active sessions (for debugging/admin purposes)"""
-        # Clean up expired sessions first
-        self.cleanup_expired_sessions()
-        return self.sessions.copy()
-    
-    def get_session_count(self) -> int:
-        """Get count of active sessions"""
-        self.cleanup_expired_sessions()
-        return len(self.sessions)
+    def _is_expired(self, session: Dict) -> bool:
+        """Check if a session has expired"""
+        ttl = timedelta(minutes=SESSION_TTL_MINUTES)
+        return datetime.now() - session['last_accessed'] > ttl
 
 
 # Global session manager instance
-session_manager = SessionManager()
+_session_manager = SessionManager()
+
+
+def get_session_manager() -> SessionManager:
+    """Get the global session manager"""
+    return _session_manager

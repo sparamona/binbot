@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera-First Behavior Test</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 20px; 
+            background: #f5f5f5;
+        }
+        .test-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .camera-btn {
+            background: #4f46e5;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 1.2rem;
+            display: block;
+            margin: 20px auto;
+        }
+        .camera-btn:hover { background: #3730a3; }
+        .result {
+            background: #f8f9fa;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            font-family: monospace;
+        }
+        .success { border-left: 4px solid #10b981; }
+        .error { border-left: 4px solid #ef4444; }
+        .info { border-left: 4px solid #3b82f6; }
+        .behavior-list {
+            background: #f0f9ff;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #3b82f6;
+        }
+        .behavior-list h4 {
+            margin-top: 0;
+            color: #1e40af;
+        }
+        .behavior-list ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        .behavior-list li {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>📷 Camera-First Behavior Test</h1>
+        <p>This page tests the new camera-first behavior where clicking the camera button defaults to taking a photo.</p>
+        
+        <div class="test-section">
+            <h2>Expected Behavior</h2>
+            <div class="behavior-list">
+                <h4>✅ Camera Supported & Permission Granted:</h4>
+                <ul>
+                    <li>Click camera button → Camera preview opens immediately</li>
+                    <li>Large red 📷 button to capture photo</li>
+                    <li>Green 📁 button to switch to file upload</li>
+                    <li>Blue 🔄 button to switch cameras (if multiple available)</li>
+                    <li>Gray ❌ button to cancel</li>
+                </ul>
+                
+                <h4>⚠️ Camera Permission Denied:</h4>
+                <ul>
+                    <li>Click camera button → Permission denied modal</li>
+                    <li>Shows instructions to re-enable camera</li>
+                    <li>Provides fallback 📁 "Choose from Files" button</li>
+                </ul>
+                
+                <h4>❌ Camera Not Supported:</h4>
+                <ul>
+                    <li>Click camera button → File picker opens directly</li>
+                    <li>No camera options shown</li>
+                    <li>Seamless fallback to file upload</li>
+                </ul>
+                
+                <h4>🔧 Camera Fails to Start:</h4>
+                <ul>
+                    <li>Click camera button → Fallback options modal</li>
+                    <li>Shows error message</li>
+                    <li>Provides 📁 "Choose from Files" button</li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="test-section">
+            <h2>Test Camera Button</h2>
+            <p>Click the button below to test the camera-first behavior:</p>
+            <button class="camera-btn" onclick="testCameraButton()">📷 Test Camera Button</button>
+            <div id="testResult" class="result info">Click the button above to test the camera behavior.</div>
+        </div>
+        
+        <div class="test-section">
+            <h2>Manual Testing Steps</h2>
+            <ol>
+                <li><strong>Open BinBot:</strong> Go to <a href="http://localhost:8001" target="_blank">http://localhost:8001</a></li>
+                <li><strong>Click Camera Button:</strong> Click the 📷 button in the chat input</li>
+                <li><strong>Verify Behavior:</strong> Check that it matches the expected behavior above</li>
+                <li><strong>Test Fallbacks:</strong> Try denying camera permission to test fallback behavior</li>
+                <li><strong>Test File Option:</strong> In camera preview, click the 📁 button to switch to file upload</li>
+            </ol>
+        </div>
+        
+        <div class="test-section">
+            <h2>Browser Compatibility</h2>
+            <div id="compatibilityResult" class="result">
+                <strong>Browser Support Check:</strong><br>
+                • getUserMedia API: <span id="getUserMediaSupport">Checking...</span><br>
+                • Camera Permission API: <span id="permissionSupport">Checking...</span><br>
+                • File Input API: <span id="fileSupport">Checking...</span><br>
+                • Canvas API: <span id="canvasSupport">Checking...</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Check browser compatibility on load
+        window.onload = function() {
+            checkBrowserCompatibility();
+        };
+        
+        function checkBrowserCompatibility() {
+            // getUserMedia support
+            const getUserMediaSupported = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+            document.getElementById('getUserMediaSupport').textContent = getUserMediaSupported ? '✅ Supported' : '❌ Not Supported';
+            
+            // Permission API support
+            const permissionSupported = !!navigator.permissions;
+            document.getElementById('permissionSupport').textContent = permissionSupported ? '✅ Supported' : '⚠️ Limited Support';
+            
+            // File input support (always supported in modern browsers)
+            document.getElementById('fileSupport').textContent = '✅ Supported';
+            
+            // Canvas support
+            const canvas = document.createElement('canvas');
+            const canvasSupported = !!(canvas.getContext && canvas.getContext('2d'));
+            document.getElementById('canvasSupport').textContent = canvasSupported ? '✅ Supported' : '❌ Not Supported';
+        }
+        
+        async function testCameraButton() {
+            const result = document.getElementById('testResult');
+            result.className = 'result info';
+            result.textContent = 'Testing camera button behavior...';
+            
+            try {
+                // Check camera support
+                const isSupported = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+                
+                if (!isSupported) {
+                    result.className = 'result info';
+                    result.textContent = `✅ Camera not supported - Expected behavior: File picker should open directly
+Browser: ${navigator.userAgent.split(' ').pop()}
+Expected: Direct file upload fallback`;
+                    return;
+                }
+                
+                // Check permission status
+                let permissionStatus = 'unknown';
+                if (navigator.permissions) {
+                    try {
+                        const permission = await navigator.permissions.query({ name: 'camera' });
+                        permissionStatus = permission.state;
+                    } catch (error) {
+                        permissionStatus = 'unknown';
+                    }
+                }
+                
+                result.className = 'result success';
+                result.textContent = `✅ Camera supported - Expected behavior based on permission status:
+
+Permission Status: ${permissionStatus.toUpperCase()}
+
+Expected Behavior:
+${permissionStatus === 'granted' ? '• Camera preview should open immediately' : ''}
+${permissionStatus === 'denied' ? '• Permission denied modal should appear' : ''}
+${permissionStatus === 'prompt' ? '• Browser should ask for camera permission' : ''}
+${permissionStatus === 'unknown' ? '• Browser will attempt to access camera' : ''}
+
+Next Steps:
+1. Open BinBot in another tab: http://localhost:8001
+2. Click the 📷 camera button
+3. Verify the behavior matches the expectation above
+4. Test the 📁 file upload option in camera preview`;
+                
+            } catch (error) {
+                result.className = 'result error';
+                result.textContent = `❌ Test failed: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>

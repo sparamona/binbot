@@ -1,79 +1,21 @@
+"""
+BinBot Configuration - Simple environment variable based settings
+"""
+
 import os
-import yaml
-import re
-from typing import Dict, Any
+from dotenv import load_dotenv
 
+# Load environment variables from .env file
+load_dotenv()
 
-class Settings:
-    """Configuration management for BinBot"""
-    
-    def __init__(self):
-        self.config = self.load_config()
-    
-    def load_config(self) -> Dict[str, Any]:
-        """Load configuration from config.yaml with environment variable substitution"""
-        try:
-            with open("config.yaml", "r") as file:
-                config_content = file.read()
+# Simple configuration constants
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+DATABASE_PATH = os.getenv('DATABASE_PATH', './data/chromadb')
+IMAGES_PATH = os.getenv('IMAGES_PATH', './data/images')
+API_HOST = os.getenv('API_HOST', '0.0.0.0')
+API_PORT = int(os.getenv('API_PORT', '8000'))
+SESSION_TTL_MINUTES = int(os.getenv('SESSION_TTL_MINUTES', '30'))
 
-            # Replace environment variables
-            def replace_env_var(match):
-                var_name = match.group(1)
-                return os.environ.get(var_name, match.group(0))
-
-            config_content = re.sub(r'\$\{([^}]+)\}', replace_env_var, config_content)
-
-            # Parse YAML
-            config = yaml.safe_load(config_content)
-            return config if config else {}
-
-        except FileNotFoundError:
-            print("Warning: config.yaml not found, using default configuration")
-            return self._get_default_config()
-        except yaml.YAMLError as e:
-            print(f"Error parsing config.yaml: {e}")
-            return self._get_default_config()
-        except Exception as e:
-            print(f"Unexpected error loading configuration: {e}")
-            return self._get_default_config()
-
-    def _get_default_config(self) -> Dict[str, Any]:
-        """Get default configuration"""
-        return {
-            "database": {
-                "persist_directory": "/app/data/chromadb",
-                "collection_name": "inventory",
-                "embedding_dimension": 1536
-            },
-            "server": {
-                "host": "0.0.0.0",
-                "port": 8000,
-                "debug": False
-            },
-            "llm": {
-                "provider": "openai",
-                "openai": {
-                    "model": "gpt-4",
-                    "embedding_model": "text-embedding-ada-002",
-                    "embedding_dimension": 1536
-                }
-            },
-            "voice": {
-                "provider": "browser",
-                "browser": {
-                    "tts_rate": 0.9,
-                    "tts_pitch": 1.0,
-                    "tts_volume": 0.8
-                },
-                "openai": {
-                    "tts_model": "tts-1",
-                    "tts_voice": "alloy",
-                    "whisper_model": "whisper-1",
-                    "audio_format": "mp3"
-                }
-            }
-        }
-
-    def get_voice_config(self) -> Dict[str, Any]:
-        """Get voice configuration"""
-        return self.config.get('voice', self._get_default_config()['voice'])
+# Storage mode: 'memory' for testing, 'persistent' for production
+STORAGE_MODE = os.getenv('STORAGE_MODE', 'persistent')

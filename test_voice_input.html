@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BinBot Voice Input Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+            line-height: 1.6;
+        }
+        
+        .test-section {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            margin: 1rem 0;
+        }
+        
+        .test-section h3 {
+            margin-top: 0;
+            color: #1e293b;
+        }
+        
+        .status {
+            padding: 0.5rem 1rem;
+            border-radius: 0.25rem;
+            font-weight: 500;
+            margin: 0.5rem 0;
+        }
+        
+        .supported { background: #dcfce7; color: #166534; }
+        .not-supported { background: #fef2f2; color: #dc2626; }
+        .success { background: #dcfce7; color: #166534; }
+        .error { background: #fef2f2; color: #dc2626; }
+        .info { background: #dbeafe; color: #1d4ed8; }
+        
+        button {
+            background: #4f46e5;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            font-size: 1rem;
+            margin: 0.5rem 0.5rem 0.5rem 0;
+        }
+        
+        button:hover { background: #3730a3; }
+        button:disabled { background: #9ca3af; cursor: not-allowed; }
+        
+        .voice-btn.listening {
+            background: #d97706;
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        #transcript {
+            background: white;
+            border: 1px solid #d1d5db;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            min-height: 100px;
+            margin: 1rem 0;
+            font-family: monospace;
+        }
+        
+        .log {
+            background: #1f2937;
+            color: #f9fafb;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            font-family: monospace;
+            font-size: 0.875rem;
+            max-height: 200px;
+            overflow-y: auto;
+            margin: 1rem 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎤 BinBot Voice Input Test</h1>
+    <p>This page tests the voice input functionality for BinBot.</p>
+
+    <div class="test-section">
+        <h3>1. Browser Support Check</h3>
+        <div id="supportStatus" class="status">Checking...</div>
+        <div id="supportDetails"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>2. Microphone Permission Test</h3>
+        <button onclick="testMicrophonePermission()">Request Microphone Permission</button>
+        <div id="permissionResult"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>3. Speech Recognition Test</h3>
+        <button id="voiceTestBtn" onclick="toggleVoiceTest()">🎤 Start Voice Test</button>
+        <div id="voiceStatus" class="status info">Click the button above to start voice recognition test</div>
+        <div>
+            <strong>Live Transcript:</strong>
+            <div id="transcript">Transcript will appear here...</div>
+        </div>
+        <div>
+            <strong>Final Results:</strong>
+            <ul id="finalResults"></ul>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h3>4. Test Log</h3>
+        <button onclick="clearLog()">Clear Log</button>
+        <div id="testLog" class="log"></div>
+    </div>
+
+    <script>
+        // Simple VoiceManager for testing (copied from main app)
+        class VoiceManager {
+            constructor() {
+                this.recognition = null;
+                this.hasPermission = false;
+                this.isSupported = this.checkSupport();
+                this.isListening = false;
+                this.currentLanguage = 'en-US';
+                this.currentTranscript = '';
+                this.finalTranscript = '';
+                this.onResult = null;
+                this.onFinalResult = null;
+                this.onError = null;
+            }
+
+            checkSupport() {
+                const hasMediaDevices = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+                const hasSpeechRecognition = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+                return hasMediaDevices && hasSpeechRecognition;
+            }
+
+            async getPermissionStatus() {
+                if (!navigator.permissions) return 'unknown';
+                try {
+                    const permission = await navigator.permissions.query({ name: 'microphone' });
+                    return permission.state;
+                } catch (error) {
+                    return 'unknown';
+                }
+            }
+
+            async requestPermission() {
+                if (!this.isSupported) {
+                    throw new Error('Voice input is not supported in this browser');
+                }
+
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({
+                        audio: true,
+                        video: false
+                    });
+
+                    this.hasPermission = true;
+                    stream.getTracks().forEach(track => track.stop());
+                    return true;
+                } catch (error) {
+                    this.hasPermission = false;
+                    console.error('Voice permission error:', error);
+                    throw new Error('Microphone access denied');
+                }
+            }
+
+            initializeSpeechRecognition() {
+                if (!this.isSupported) {
+                    throw new Error('Speech recognition is not supported');
+                }
+
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                this.recognition = new SpeechRecognition();
+
+                this.recognition.continuous = true;
+                this.recognition.interimResults = true;
+                this.recognition.lang = this.currentLanguage;
+                this.recognition.maxAlternatives = 1;
+
+                this.recognition.onresult = (event) => {
+                    let interimTranscript = '';
+                    let finalTranscript = '';
+
+                    for (let i = event.resultIndex; i < event.results.length; i++) {
+                        const transcript = event.results[i][0].transcript;
+                        if (event.results[i].isFinal) {
+                            finalTranscript += transcript;
+                        } else {
+                            interimTranscript += transcript;
+                        }
+                    }
+
+                    this.currentTranscript = interimTranscript;
+                    this.finalTranscript += finalTranscript;
+
+                    if (this.onResult) {
+                        this.onResult(this.finalTranscript + this.currentTranscript);
+                    }
+
+                    if (finalTranscript && this.onFinalResult) {
+                        this.onFinalResult(this.finalTranscript.trim());
+                    }
+                };
+
+                this.recognition.onerror = (event) => {
+                    console.error('Speech recognition error:', event.error);
+                    if (this.onError) {
+                        this.onError(event.error);
+                    }
+                };
+
+                this.recognition.onend = () => {
+                    this.isListening = false;
+                };
+
+                return this.recognition;
+            }
+
+            async startListening() {
+                if (!this.hasPermission) {
+                    await this.requestPermission();
+                }
+
+                if (!this.recognition) {
+                    this.initializeSpeechRecognition();
+                }
+
+                this.isListening = true;
+                this.recognition.start();
+            }
+
+            stopListening() {
+                if (this.recognition && this.isListening) {
+                    this.isListening = false;
+                    this.recognition.stop();
+                }
+            }
+
+            resetTranscript() {
+                this.currentTranscript = '';
+                this.finalTranscript = '';
+            }
+
+            setCallbacks(onResult, onFinalResult, onError) {
+                this.onResult = onResult;
+                this.onFinalResult = onFinalResult;
+                this.onError = onError;
+            }
+        }
+
+        // Test variables
+        let voiceManager;
+        let testStartTime;
+
+        // Initialize tests
+        window.onload = function() {
+            voiceManager = new VoiceManager();
+            checkBrowserSupport();
+            log('Voice input test page loaded');
+        };
+
+        function log(message) {
+            const logElement = document.getElementById('testLog');
+            const timestamp = new Date().toLocaleTimeString();
+            logElement.innerHTML += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('testLog').innerHTML = '';
+        }
+
+        function checkBrowserSupport() {
+            const supportElement = document.getElementById('supportStatus');
+            const detailsElement = document.getElementById('supportDetails');
+            
+            if (voiceManager.isSupported) {
+                supportElement.className = 'status supported';
+                supportElement.textContent = '✅ Voice input is supported';
+                
+                const hasMediaDevices = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+                const hasSpeechRecognition = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+                
+                detailsElement.innerHTML = `
+                    <p><strong>MediaDevices API:</strong> ${hasMediaDevices ? '✅ Supported' : '❌ Not supported'}</p>
+                    <p><strong>Speech Recognition API:</strong> ${hasSpeechRecognition ? '✅ Supported' : '❌ Not supported'}</p>
+                    <p><strong>User Agent:</strong> ${navigator.userAgent}</p>
+                `;
+                
+                log('Browser support: SUPPORTED');
+            } else {
+                supportElement.className = 'status not-supported';
+                supportElement.textContent = '❌ Voice input is not supported';
+                detailsElement.innerHTML = '<p>This browser does not support the required APIs for voice input.</p>';
+                log('Browser support: NOT SUPPORTED');
+            }
+        }
+
+        async function testMicrophonePermission() {
+            const resultElement = document.getElementById('permissionResult');
+            
+            try {
+                log('Testing microphone permission...');
+                const permissionStatus = await voiceManager.getPermissionStatus();
+                log(`Current permission status: ${permissionStatus}`);
+                
+                await voiceManager.requestPermission();
+                
+                resultElement.innerHTML = '<div class="status success">✅ Microphone permission granted!</div>';
+                log('Microphone permission: GRANTED');
+                
+            } catch (error) {
+                resultElement.innerHTML = `<div class="status error">❌ Microphone permission failed: ${error.message}</div>`;
+                log(`Microphone permission: FAILED - ${error.message}`);
+            }
+        }
+
+        function toggleVoiceTest() {
+            if (!voiceManager.isListening) {
+                startVoiceTest();
+            } else {
+                stopVoiceTest();
+            }
+        }
+
+        function startVoiceTest() {
+            const btn = document.getElementById('voiceTestBtn');
+            const status = document.getElementById('voiceStatus');
+            
+            try {
+                log('Starting voice recognition test...');
+                testStartTime = Date.now();
+                
+                // Set up callbacks
+                voiceManager.setCallbacks(
+                    (transcript) => {
+                        document.getElementById('transcript').textContent = transcript || 'Listening...';
+                    },
+                    (finalTranscript) => {
+                        const resultsElement = document.getElementById('finalResults');
+                        const li = document.createElement('li');
+                        li.textContent = finalTranscript;
+                        resultsElement.appendChild(li);
+                        log(`Final result: "${finalTranscript}"`);
+                        voiceManager.resetTranscript();
+                    },
+                    (error) => {
+                        log(`Voice recognition error: ${error}`);
+                        status.className = 'status error';
+                        status.textContent = `❌ Error: ${error}`;
+                        stopVoiceTest();
+                    }
+                );
+                
+                voiceManager.startListening();
+                
+                btn.textContent = '🛑 Stop Voice Test';
+                btn.classList.add('listening');
+                status.className = 'status success';
+                status.textContent = '🎤 Listening... Speak now!';
+                
+                log('Voice recognition: STARTED');
+                
+            } catch (error) {
+                log(`Failed to start voice test: ${error.message}`);
+                status.className = 'status error';
+                status.textContent = `❌ Failed to start: ${error.message}`;
+            }
+        }
+
+        function stopVoiceTest() {
+            const btn = document.getElementById('voiceTestBtn');
+            const status = document.getElementById('voiceStatus');
+            
+            voiceManager.stopListening();
+            
+            btn.textContent = '🎤 Start Voice Test';
+            btn.classList.remove('listening');
+            status.className = 'status info';
+            status.textContent = 'Voice test stopped. Click button to start again.';
+            
+            document.getElementById('transcript').textContent = 'Transcript will appear here...';
+            
+            const duration = testStartTime ? ((Date.now() - testStartTime) / 1000).toFixed(1) : 'unknown';
+            log(`Voice recognition: STOPPED (duration: ${duration}s)`);
+        }
+    </script>
+</body>
+</html>

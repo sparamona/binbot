@@ -1,11 +1,15 @@
+version: '3.8'
+
 services:
   binbot:
     build: .
     ports:
-      - "${PORT:-8000}:8000"
+      - "8000:8000"
     environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
     volumes:
-      - ./data:/app/data
+      - binbot_data:/app/data
+
+volumes:
+  binbot_data:

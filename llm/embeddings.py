@@ -1,24 +1,50 @@
-from typing import List, Optional
-from .client import LLMClient
+"""
+Simple embeddings service using Gemini with new google-genai SDK
+"""
+
+from google import genai
+from google.genai import types
+from typing import List
+
+from config.settings import GEMINI_API_KEY
+from config.embeddings import EMBEDDING_MODEL
 
 
 class EmbeddingService:
-    """Embedding generation service for BinBot"""
+    """Simple embedding service using Gemini with new SDK"""
 
-    def __init__(self, llm_client: LLMClient):
-        self.llm_client = llm_client
+    def __init__(self):
+        pass
 
-    def generate_embedding(self, text: str) -> Optional[List[float]]:
-        """Generate embedding for text using the active LLM provider"""
-        if not text.strip():
-            return None
+    def _create_client(self) -> genai.Client:
+        """Create a fresh Gemini client for each request"""
+        return genai.Client(api_key=GEMINI_API_KEY)
 
-        try:
-            return self.llm_client.generate_embedding(text)
-        except Exception as e:
-            print(f"Error generating embedding: {e}")
-            print(f"Error type: {type(e)}")
-            import traceback
-            print(f"Full traceback:")
-            traceback.print_exc()
-            raise e
+    def generate_embedding(self, text: str) -> List[float]:
+        """Generate embedding for a single text using new SDK"""
+        client = self._create_client()
+        response = client.models.embed_content(
+            model=f"models/{EMBEDDING_MODEL}",
+            contents=text
+        )
+        return response.embeddings[0].values
+
+    def batch_generate_embeddings(self, texts: List[str]) -> List[List[float]]:
+        """Generate embeddings for multiple texts"""
+        embeddings = []
+        for text in texts:
+            embedding = self.generate_embedding(text)
+            embeddings.append(embedding)
+        return embeddings
+
+
+# Global embedding service instance
+_embedding_service = None
+
+
+def get_embedding_service() -> EmbeddingService:
+    """Get the global embedding service"""
+    global _embedding_service
+    if _embedding_service is None:
+        _embedding_service = EmbeddingService()
+    return _embedding_service

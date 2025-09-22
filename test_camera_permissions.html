@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera Permissions Test</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 20px; 
+            background: #f5f5f5;
+        }
+        .test-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        button {
+            background: #4f46e5;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #3730a3; }
+        .result {
+            background: #f8f9fa;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        .success { border-left: 4px solid #10b981; }
+        .error { border-left: 4px solid #ef4444; }
+        .info { border-left: 4px solid #3b82f6; }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>📷 Camera Permissions Test</h1>
+        <p>This page tests the camera permission functionality implemented in BinBot.</p>
+        
+        <div class="test-section">
+            <h2>1. Camera Support Check</h2>
+            <button onclick="testCameraSupport()">Check Camera Support</button>
+            <div id="supportResult" class="result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h2>2. Permission Status</h2>
+            <button onclick="testPermissionStatus()">Check Permission Status</button>
+            <div id="permissionResult" class="result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h2>3. Request Camera Permission</h2>
+            <button onclick="testRequestPermission()">Request Permission</button>
+            <div id="requestResult" class="result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h2>4. Get Camera Devices</h2>
+            <button onclick="testGetDevices()">Get Available Cameras</button>
+            <div id="devicesResult" class="result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h2>5. Test Camera Stream</h2>
+            <button onclick="testCameraStream()">Start Camera Stream</button>
+            <button onclick="stopCameraStream()">Stop Camera Stream</button>
+            <div id="streamResult" class="result"></div>
+            <video id="testVideo" width="300" height="200" style="display:none; margin-top: 10px; border-radius: 5px;"></video>
+        </div>
+    </div>
+
+    <script>
+        // Import the CameraManager class from BinBot
+        // Note: In a real test, you'd import this properly
+        
+        let cameraManager;
+        let testVideo;
+        
+        // Initialize when page loads
+        window.onload = function() {
+            // Create a simple CameraManager for testing
+            cameraManager = {
+                stream: null,
+                hasPermission: false,
+                isSupported: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
+                devices: [],
+                currentDeviceId: null,
+                
+                async getPermissionStatus() {
+                    if (!navigator.permissions) return 'unknown';
+                    try {
+                        const permission = await navigator.permissions.query({ name: 'camera' });
+                        return permission.state;
+                    } catch (error) {
+                        return 'unknown';
+                    }
+                },
+                
+                async requestPermission() {
+                    if (!this.isSupported) {
+                        throw new Error('Camera is not supported in this browser');
+                    }
+                    
+                    try {
+                        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                        this.hasPermission = true;
+                        stream.getTracks().forEach(track => track.stop());
+                        await this.getDevices();
+                        return true;
+                    } catch (error) {
+                        this.hasPermission = false;
+                        throw this.handlePermissionError(error);
+                    }
+                },
+                
+                async getDevices() {
+                    try {
+                        const devices = await navigator.mediaDevices.enumerateDevices();
+                        this.devices = devices.filter(device => device.kind === 'videoinput');
+                        if (this.devices.length > 0 && !this.currentDeviceId) {
+                            const backCamera = this.devices.find(device => 
+                                device.label.toLowerCase().includes('back') || 
+                                device.label.toLowerCase().includes('rear')
+                            );
+                            this.currentDeviceId = backCamera ? backCamera.deviceId : this.devices[0].deviceId;
+                        }
+                        return this.devices;
+                    } catch (error) {
+                        console.error('Error getting camera devices:', error);
+                        return [];
+                    }
+                },
+                
+                async startStream(deviceId = null) {
+                    if (!this.hasPermission) {
+                        await this.requestPermission();
+                    }
+                    
+                    try {
+                        const constraints = {
+                            video: {
+                                deviceId: deviceId || this.currentDeviceId ? 
+                                    { exact: deviceId || this.currentDeviceId } : true,
+                                width: { ideal: 1280 },
+                                height: { ideal: 720 }
+                            },
+                            audio: false
+                        };
+                        
+                        this.stream = await navigator.mediaDevices.getUserMedia(constraints);
+                        return this.stream;
+                    } catch (error) {
+                        throw this.handleStreamError(error);
+                    }
+                },
+                
+                stopStream() {
+                    if (this.stream) {
+                        this.stream.getTracks().forEach(track => track.stop());
+                        this.stream = null;
+                    }
+                },
+                
+                handlePermissionError(error) {
+                    switch (error.name) {
+                        case 'NotAllowedError':
+                            return new Error('Camera access denied. Please allow camera access and try again.');
+                        case 'NotFoundError':
+                            return new Error('No camera found on this device.');
+                        case 'NotSupportedError':
+                            return new Error('Camera is not supported in this browser.');
+                        case 'NotReadableError':
+                            return new Error('Camera is already in use by another application.');
+                        default:
+                            return new Error(`Camera error: ${error.message}`);
+                    }
+                },
+                
+                handleStreamError(error) {
+                    switch (error.name) {
+                        case 'OverconstrainedError':
+                            return new Error('Camera constraints could not be satisfied.');
+                        case 'NotReadableError':
+                            return new Error('Camera is already in use.');
+                        default:
+                            return this.handlePermissionError(error);
+                    }
+                }
+            };
+            
+            testVideo = document.getElementById('testVideo');
+        };
+        
+        function testCameraSupport() {
+            const result = document.getElementById('supportResult');
+            const isSupported = cameraManager.isSupported;
+            
+            result.className = `result ${isSupported ? 'success' : 'error'}`;
+            result.textContent = `Camera Support: ${isSupported ? 'SUPPORTED ✅' : 'NOT SUPPORTED ❌'}
+Browser: ${navigator.userAgent}
+getUserMedia: ${!!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)}`;
+        }
+        
+        async function testPermissionStatus() {
+            const result = document.getElementById('permissionResult');
+            try {
+                const status = await cameraManager.getPermissionStatus();
+                result.className = 'result info';
+                result.textContent = `Permission Status: ${status.toUpperCase()}
+- granted: Camera access is allowed
+- denied: Camera access is blocked
+- prompt: Browser will ask for permission
+- unknown: Cannot determine status`;
+            } catch (error) {
+                result.className = 'result error';
+                result.textContent = `Error checking permission: ${error.message}`;
+            }
+        }
+        
+        async function testRequestPermission() {
+            const result = document.getElementById('requestResult');
+            try {
+                result.className = 'result info';
+                result.textContent = 'Requesting camera permission...';
+                
+                await cameraManager.requestPermission();
+                
+                result.className = 'result success';
+                result.textContent = `Permission granted! ✅
+Has Permission: ${cameraManager.hasPermission}
+Available Devices: ${cameraManager.devices.length}`;
+            } catch (error) {
+                result.className = 'result error';
+                result.textContent = `Permission denied: ${error.message}`;
+            }
+        }
+        
+        async function testGetDevices() {
+            const result = document.getElementById('devicesResult');
+            try {
+                const devices = await cameraManager.getDevices();
+                
+                result.className = 'result success';
+                result.textContent = `Found ${devices.length} camera device(s):
+${devices.map((device, index) => 
+    `${index + 1}. ${device.label || 'Unknown Camera'} (${device.deviceId.substring(0, 20)}...)`
+).join('\n')}
+
+Current Device: ${cameraManager.currentDeviceId ? cameraManager.currentDeviceId.substring(0, 20) + '...' : 'None'}`;
+            } catch (error) {
+                result.className = 'result error';
+                result.textContent = `Error getting devices: ${error.message}`;
+            }
+        }
+        
+        async function testCameraStream() {
+            const result = document.getElementById('streamResult');
+            try {
+                result.className = 'result info';
+                result.textContent = 'Starting camera stream...';
+                
+                const stream = await cameraManager.startStream();
+                testVideo.srcObject = stream;
+                testVideo.style.display = 'block';
+                testVideo.play();
+                
+                result.className = 'result success';
+                result.textContent = `Camera stream started! ✅
+Stream active: ${stream.active}
+Video tracks: ${stream.getVideoTracks().length}
+Track settings: ${JSON.stringify(stream.getVideoTracks()[0].getSettings(), null, 2)}`;
+            } catch (error) {
+                result.className = 'result error';
+                result.textContent = `Stream error: ${error.message}`;
+                testVideo.style.display = 'none';
+            }
+        }
+        
+        function stopCameraStream() {
+            const result = document.getElementById('streamResult');
+            cameraManager.stopStream();
+            testVideo.style.display = 'none';
+            testVideo.srcObject = null;
+            
+            result.className = 'result info';
+            result.textContent = 'Camera stream stopped.';
+        }
+    </script>
+</body>
+</html>

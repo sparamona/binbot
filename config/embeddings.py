@@ -1,31 +1,15 @@
 """
-Centralized embedding configuration for BinBot
+Embeddings Configuration for BinBot - Simple constants
 """
 
-# OpenAI text-embedding-ada-002 produces 1536-dimensional embeddings
-OPENAI_EMBEDDING_DIMENSION = 1536
+import os
 
-# Default embedding dimension for the system (OpenAI only)
-DEFAULT_EMBEDDING_DIMENSION = OPENAI_EMBEDDING_DIMENSION
+# Simple embedding configuration
+EMBEDDING_MODEL = os.getenv('EMBEDDING_MODEL', 'text-embedding-004')
+EMBEDDING_BATCH_SIZE = int(os.getenv('EMBEDDING_BATCH_SIZE', '100'))
 
-# Embedding model configurations
-EMBEDDING_MODELS = {
-    "openai": {
-        "model": "text-embedding-ada-002",
-        "dimension": OPENAI_EMBEDDING_DIMENSION,
-        "provider": "openai"
-    }
-}
-
-def get_embedding_dimension(model_name: str = "openai") -> int:
-    """Get embedding dimension for a specific model"""
-    return EMBEDDING_MODELS.get(model_name, {}).get("dimension", DEFAULT_EMBEDDING_DIMENSION)
-
-def get_model_info(embedding_length: int) -> dict:
-    """Get model info based on embedding length"""
-    for model_name, config in EMBEDDING_MODELS.items():
-        if config["dimension"] == embedding_length:
-            return {"name": model_name, **config}
-
-    # Default fallback
-    return {"name": "unknown", "model": "unknown", "dimension": embedding_length, "provider": "unknown"}
+# Embedding dimensions for different models
+# text-embedding-004: 768 dimensions
+# text-embedding-3-small: 1536 dimensions
+# text-embedding-3-large: 3072 dimensions
+EMBEDDING_DIMENSION = int(os.getenv('EMBEDDING_DIMENSION', '768'))

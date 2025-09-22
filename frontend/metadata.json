@@ -1,0 +1,8 @@
+{
+  "name": "Copy of BinBot Inventory Manager",
+  "description": "A conversational UI to manage your inventory. Chat with BinBot to find items, check stock, and organize your bins.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}

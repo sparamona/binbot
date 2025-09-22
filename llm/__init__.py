@@ -1,1 +1,1 @@
-# LLM module
+# LLM package
