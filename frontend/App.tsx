@@ -9,9 +9,22 @@ import { useChat, useInventory } from './hooks/useApi';
 import type { Message, InventoryItem } from './types';
 
 const App: React.FC = () => {
-  // Use real API hooks instead of mock data
-  const { messages, isLoading, currentBin, sendMessage, uploadImage } = useChat();
-  const { items: inventoryItems, isLoading: inventoryLoading, lastUpdated, reload: reloadInventory } = useInventory(currentBin);
+  // Initialize inventory hook first
+  const [currentBinState, setCurrentBinState] = useState<string>('');
+  const { items: inventoryItems, isLoading: inventoryLoading, lastUpdated, reload: reloadInventory } = useInventory(currentBinState);
+
+  // Use real API hooks with inventory update callback
+  const { messages, isLoading, currentBin, sendMessage, uploadImage } = useChat(() => {
+    // Trigger inventory reload when chat updates
+    reloadInventory();
+  });
+
+  // Update local bin state when chat hook updates currentBin
+  useEffect(() => {
+    if (currentBin !== currentBinState) {
+      setCurrentBinState(currentBin);
+    }
+  }, [currentBin, currentBinState]);
 
   // UI state
   const [activeTab, setActiveTab] = useState<'chat' | 'inventory'>('chat');
