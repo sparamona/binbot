@@ -39,7 +39,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
       )}
       <div className={`flex flex-col ${isBot ? 'items-start' : 'items-end'}`}>
         <div
-          className={`max-w-md rounded-lg p-3 text-sm ${
+          className={`max-w-2xl rounded-lg p-3 text-sm ${
             isBot ? 'bg-slate-100 text-slate-800 rounded-tl-none' : 'bg-slate-900 text-white rounded-br-none'
           }`}
         >
