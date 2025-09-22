@@ -96,7 +96,7 @@ class ApiClient {
         'Content-Type': 'application/json',
       },
       credentials: 'include',
-      body: JSON.stringify({ message })
+      body: JSON.stringify({ message, fmt: format })
     });
 
     if (!response.ok) {

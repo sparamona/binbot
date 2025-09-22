@@ -7,7 +7,7 @@ import { useState, useRef, useCallback } from 'react';
 
 interface VoiceInputOptions {
   onResult?: (transcript: string) => void;
-  onFinalResult?: (finalTranscript: string, isMicrophoneActive: boolean) => void;
+  onFinalResult?: (finalTranscript: string) => void;
   onError?: (error: string) => void;
   language?: string;
 }
@@ -15,7 +15,6 @@ interface VoiceInputOptions {
 interface VoiceInputState {
   isSupported: boolean;
   isListening: boolean;
-  isMicrophoneActive: boolean;  // Tracks if mic button is "on" (user intent)
   hasPermission: boolean;
   currentTranscript: string;
   error: string | null;
@@ -32,7 +31,6 @@ export function useVoiceInput(options: VoiceInputOptions = {}) {
   const [state, setState] = useState<VoiceInputState>({
     isSupported: checkVoiceSupport(),
     isListening: false,
-    isMicrophoneActive: false,
     hasPermission: false,
     currentTranscript: '',
     error: null
@@ -40,8 +38,7 @@ export function useVoiceInput(options: VoiceInputOptions = {}) {
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const finalTranscriptRef = useRef<string>('');
-  const isMicrophoneActiveRef = useRef<boolean>(false); // Track current microphone state
-  const submitTimeoutRef = useRef<NodeJS.Timeout | null>(null); // Debounce timer
+  const shouldSubmitOnEndRef = useRef<boolean>(false); // Track if we should submit when recognition ends
 
   // Check if browser supports speech recognition
   function checkVoiceSupport(): boolean {
@@ -71,7 +68,7 @@ export function useVoiceInput(options: VoiceInputOptions = {}) {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
 
-    recognition.continuous = true;
+    recognition.continuous = true; // Keep listening during pauses
     recognition.interimResults = true;
     recognition.lang = language;
     recognition.maxAlternatives = 1;
@@ -116,23 +113,8 @@ export function useVoiceInput(options: VoiceInputOptions = {}) {
         onResult(combinedTranscript);
       }
 
-      // Submit immediately if we have high-confidence final results
-      if (finalTranscript && onFinalResult) {
-        // Clear any existing timeout
-        if (submitTimeoutRef.current) {
-          clearTimeout(submitTimeoutRef.current);
-        }
-
-        // Submit after a short delay to allow for additional results
-        submitTimeoutRef.current = setTimeout(() => {
-          const fullFinalTranscript = finalTranscriptRef.current.trim();
-          if (fullFinalTranscript) {
-            console.log('🎤 DEBUG: Submitting high-confidence result:', fullFinalTranscript);
-            onFinalResult(fullFinalTranscript, isMicrophoneActiveRef.current);
-            finalTranscriptRef.current = ''; // Reset after sending
-          }
-        }, 500); // Short delay to batch multiple final results
-      }
+      // In PTT mode, don't auto-submit on final results
+      // Only submit when button is manually released
     };
 
     recognition.onerror = (event) => {
@@ -144,15 +126,16 @@ export function useVoiceInput(options: VoiceInputOptions = {}) {
     };
 
     recognition.onend = () => {
-      console.log('🎤 DEBUG: Speech recognition ended, current isMicrophoneActive:', state.isMicrophoneActive);
+      console.log('🎤 DEBUG: Speech recognition ended, shouldSubmit:', shouldSubmitOnEndRef.current);
       setState(prev => ({ ...prev, isListening: false }));
 
-      // Submit accumulated transcript when speech recognition ends (natural pause)
-      if (onFinalResult && finalTranscriptRef.current.trim()) {
+      // Submit if button was released early but we were waiting for transcription to complete
+      if (shouldSubmitOnEndRef.current && onFinalResult && finalTranscriptRef.current.trim()) {
         const fullFinalTranscript = finalTranscriptRef.current.trim();
-        console.log('🎤 DEBUG: Submitting on speech end:', fullFinalTranscript);
-        onFinalResult(fullFinalTranscript, isMicrophoneActiveRef.current);
-        finalTranscriptRef.current = ''; // Reset after sending
+        console.log('🎤 DEBUG: Submitting delayed PTT result:', fullFinalTranscript);
+        onFinalResult(fullFinalTranscript);
+        finalTranscriptRef.current = '';
+        shouldSubmitOnEndRef.current = false;
       }
     };
 
@@ -187,36 +170,28 @@ export function useVoiceInput(options: VoiceInputOptions = {}) {
     }
   }, [state.hasPermission, requestPermission, initializeSpeechRecognition, onError]);
 
-  // Stop listening
+  // Stop listening and submit transcript (PTT release)
   const stopListening = useCallback(() => {
     if (recognitionRef.current && state.isListening) {
       recognitionRef.current.stop();
       setState(prev => ({ ...prev, isListening: false }));
-    }
-    // Clear any pending submission timeout
-    if (submitTimeoutRef.current) {
-      clearTimeout(submitTimeoutRef.current);
-      submitTimeoutRef.current = null;
-    }
-  }, [state.isListening]);
 
-  // Toggle listening
-  const toggleListening = useCallback(() => {
-    console.log('🎤 DEBUG: toggleListening called, current isMicrophoneActive:', state.isMicrophoneActive);
-    if (state.isMicrophoneActive) {
-      // Turn off microphone
-      console.log('🎤 DEBUG: Turning OFF microphone');
-      isMicrophoneActiveRef.current = false;
-      setState(prev => ({ ...prev, isMicrophoneActive: false }));
-      stopListening();
-    } else {
-      // Turn on microphone
-      console.log('🎤 DEBUG: Turning ON microphone');
-      isMicrophoneActiveRef.current = true;
-      setState(prev => ({ ...prev, isMicrophoneActive: true }));
-      startListening();
+      // Try to submit immediately if we have a complete transcript
+      if (onFinalResult && finalTranscriptRef.current.trim()) {
+        const fullFinalTranscript = finalTranscriptRef.current.trim();
+        console.log('🎤 DEBUG: Submitting PTT result immediately on button release:', fullFinalTranscript);
+        onFinalResult(fullFinalTranscript); // Format decided by TTS toggle
+        finalTranscriptRef.current = ''; // Reset after sending
+        shouldSubmitOnEndRef.current = false; // Don't submit again on onend
+      } else {
+        // No complete transcript yet, wait for recognition to end and then submit
+        console.log('🎤 DEBUG: No complete transcript yet, will submit when recognition ends');
+        shouldSubmitOnEndRef.current = true;
+      }
     }
-  }, [state.isMicrophoneActive, startListening, stopListening]);
+  }, [state.isListening, onFinalResult]);
+
+
 
   // Reset transcript
   const resetTranscript = useCallback(() => {
@@ -228,7 +203,6 @@ export function useVoiceInput(options: VoiceInputOptions = {}) {
     ...state,
     startListening,
     stopListening,
-    toggleListening,
     resetTranscript
   };
 }
