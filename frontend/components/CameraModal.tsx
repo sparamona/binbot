@@ -11,6 +11,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ onClose, onImageCapture }) =>
     const [stream, setStream] = useState<MediaStream | null>(null);
     const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
     const [currentDeviceId, setCurrentDeviceId] = useState<string>('');
+    const [currentFacingMode, setCurrentFacingMode] = useState<string>('environment');
     const [hasPermission, setHasPermission] = useState(false);
     const [error, setError] = useState<string>('');
     const [isLoading, setIsLoading] = useState(false);
@@ -70,7 +71,20 @@ const CameraModal: React.FC<CameraModalProps> = ({ onClose, onImageCapture }) =>
             setDevices(videoDevices);
 
             if (videoDevices.length > 0 && !currentDeviceId) {
-                setCurrentDeviceId(videoDevices[0].deviceId);
+                // Try to find back camera first, fallback to first device
+                const backCamera = videoDevices.find(device =>
+                    device.label.toLowerCase().includes('back') ||
+                    device.label.toLowerCase().includes('environment') ||
+                    device.label.toLowerCase().includes('rear')
+                );
+                const selectedDevice = backCamera || videoDevices[0];
+                setCurrentDeviceId(selectedDevice.deviceId);
+
+                // Set initial facing mode based on selected device
+                const isFrontCamera = selectedDevice.label.toLowerCase().includes('front') ||
+                                     selectedDevice.label.toLowerCase().includes('user') ||
+                                     selectedDevice.label.toLowerCase().includes('selfie');
+                setCurrentFacingMode(isFrontCamera ? 'user' : 'environment');
             }
         } catch (err) {
             console.warn('Failed to enumerate devices:', err);
@@ -79,18 +93,20 @@ const CameraModal: React.FC<CameraModalProps> = ({ onClose, onImageCapture }) =>
 
     const startStream = async (deviceId?: string) => {
         try {
+            const facingMode = 'environment'; // Prefer back camera
             const constraints = {
                 video: {
                     deviceId: deviceId || currentDeviceId ?
                         { exact: deviceId || currentDeviceId } : true,
                     width: { ideal: 1280, max: 1920 },
                     height: { ideal: 720, max: 1080 },
-                    facingMode: 'environment' // Prefer back camera
+                    facingMode: facingMode
                 },
                 audio: false
             };
 
             const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+            setCurrentFacingMode(facingMode);
 
             setStream(newStream);
 
@@ -153,6 +169,14 @@ const CameraModal: React.FC<CameraModalProps> = ({ onClose, onImageCapture }) =>
         const currentIndex = devices.findIndex(device => device.deviceId === currentDeviceId);
         const nextIndex = (currentIndex + 1) % devices.length;
         const nextDeviceId = devices[nextIndex].deviceId;
+        const nextDevice = devices[nextIndex];
+
+        // Detect facing mode from device label (rough heuristic)
+        const isFrontCamera = nextDevice.label.toLowerCase().includes('front') ||
+                             nextDevice.label.toLowerCase().includes('user') ||
+                             nextDevice.label.toLowerCase().includes('selfie');
+        const newFacingMode = isFrontCamera ? 'user' : 'environment';
+        setCurrentFacingMode(newFacingMode);
 
         stopStream();
         setCurrentDeviceId(nextDeviceId);
@@ -238,7 +262,9 @@ const CameraModal: React.FC<CameraModalProps> = ({ onClose, onImageCapture }) =>
                                 autoPlay
                                 playsInline
                                 muted
-                                style={{ transform: 'scaleX(-1)' }} // Mirror the video like a selfie
+                                style={{
+                                    transform: currentFacingMode === 'user' ? 'scaleX(-1)' : 'none'
+                                }} // Mirror front camera (selfie), normal back camera
                             />
 
                             {/* Camera controls overlay */}

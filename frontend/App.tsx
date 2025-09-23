@@ -99,8 +99,7 @@ const App: React.FC = () => {
         // Reload inventory to show any new items
         reloadInventory();
 
-        // Switch to inventory tab to show results
-        setActiveTab('inventory');
+        // Don't auto-switch to inventory tab - let user stay on current tab
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to upload image');
