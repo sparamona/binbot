@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { Message } from '../types';
 import MessageBubble from './MessageBubble';
 import ChatInput from './ChatInput';
@@ -19,6 +19,7 @@ interface ChatPanelProps {
 const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, onCameraClick, isLoading = false, isTTSSpeaking = false, onTTSStop, isTTSEnabled = false, onTTSToggle }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { isConnected } = useApiStatus();
+  const [isListening, setIsListening] = useState(false);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -30,10 +31,41 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, onCamera
 
   return (
     <div className="flex flex-col h-full">
-      <header className="flex items-center p-4 border-b border-slate-200">
+      <header className="flex items-center p-4 border-b border-slate-200 flex-shrink-0">
         <RobotIcon className="w-6 h-6 mr-3" />
         <h1 className="text-lg font-semibold">BinBot</h1>
         <div className="ml-auto flex items-center space-x-4">
+          {/* Listening indicator */}
+          <div className="flex items-center space-x-2">
+            <span className="relative flex h-2 w-2">
+              {isListening ? (
+                <>
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                </>
+              ) : (
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-slate-300"></span>
+              )}
+            </span>
+            <span className="text-sm text-slate-500">Listening</span>
+          </div>
+
+          {/* Speaking indicator */}
+          <div className="flex items-center space-x-2">
+            <span className="relative flex h-2 w-2">
+              {isTTSEnabled ? (
+                <>
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-500"></span>
+                </>
+              ) : (
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-slate-300"></span>
+              )}
+            </span>
+            <span className="text-sm text-slate-500">Speaking</span>
+          </div>
+
+          {/* Online indicator */}
           <div className="flex items-center space-x-2">
             <span className="relative flex h-2 w-2">
               {isConnected ? (
@@ -51,7 +83,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, onCamera
           </div>
         </div>
       </header>
-      <div className="flex-1 p-6 overflow-y-auto bg-slate-50/50">
+      <div className="flex-1 p-6 overflow-y-auto bg-slate-50/50 min-h-0">
         <div className="space-y-6">
           {messages.map((msg) => (
             <MessageBubble key={msg.id} message={msg} />
@@ -75,15 +107,18 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, onCamera
           <div ref={messagesEndRef} />
         </div>
       </div>
-      <ChatInput
-        onSendMessage={onSendMessage}
-        onCameraClick={onCameraClick}
-        disabled={isLoading || !isConnected}
-        isTTSSpeaking={isTTSSpeaking}
-        onTTSStop={onTTSStop}
-        isTTSEnabled={isTTSEnabled}
-        onTTSToggle={onTTSToggle}
-      />
+      <div className="flex-shrink-0">
+        <ChatInput
+          onSendMessage={onSendMessage}
+          onCameraClick={onCameraClick}
+          disabled={isLoading || !isConnected}
+          isTTSSpeaking={isTTSSpeaking}
+          onTTSStop={onTTSStop}
+          isTTSEnabled={isTTSEnabled}
+          onTTSToggle={onTTSToggle}
+          onListeningChange={setIsListening}
+        />
+      </div>
     </div>
   );
 };
