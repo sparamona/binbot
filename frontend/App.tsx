@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import Sidebar from './components/Sidebar';
+
 import ChatPanel from './components/ChatPanel';
 import InventoryPanel from './components/InventoryPanel';
 import CameraModal from './components/CameraModal';
@@ -16,7 +16,7 @@ const App: React.FC = () => {
 
   // TTS toggle state
   const [isTTSEnabled, setIsTTSEnabled] = useState(false);
-  const lastBotMessageRef = useRef<string>('');
+  const lastSpokenMessageRef = useRef<string>('');
 
   // Text-to-speech functionality
   const tts = useTextToSpeech({
@@ -38,19 +38,24 @@ const App: React.FC = () => {
     }
   }, [currentBin, currentBinState]);
 
-  // Auto-speak bot responses when TTS is enabled
+  // Stop speaking when TTS is disabled
+  useEffect(() => {
+    if (!isTTSEnabled) {
+      tts.stopSpeaking();
+    }
+  }, [isTTSEnabled, tts]);
+
+  // Auto-speak bot responses when TTS is enabled (only when new messages arrive)
   useEffect(() => {
     if (messages.length > 0 && isTTSEnabled) {
       const lastMessage = messages[messages.length - 1];
-      if (lastMessage.sender === 'bot' &&
-          lastMessage.text !== lastBotMessageRef.current) {
-
-        console.log('🔊 Auto-speaking bot response (TTS enabled):', lastMessage.text.substring(0, 50) + '...');
+      if (lastMessage.sender === 'bot' && lastMessage.text !== lastSpokenMessageRef.current) {
+        console.log('🔊 Auto-speaking new bot response:', lastMessage.text.substring(0, 50) + '...');
         tts.speak(lastMessage.text);
-        lastBotMessageRef.current = lastMessage.text;
+        lastSpokenMessageRef.current = lastMessage.text;
       }
     }
-  }, [messages, isTTSEnabled, tts]);
+  }, [messages]);
 
   // UI state
   const [activeTab, setActiveTab] = useState<'chat' | 'inventory'>('chat');
@@ -133,20 +138,17 @@ const App: React.FC = () => {
   );
 
   return (
-    <div className="flex h-screen bg-white text-slate-800 font-sans">
-      <Sidebar
-        isTTSEnabled={isTTSEnabled}
-        onTTSToggle={() => setIsTTSEnabled(!isTTSEnabled)}
-      />
-      <main className="flex flex-1 flex-col md:flex-row overflow-hidden relative">
-        {error && <ErrorDisplay message={error} onClose={() => setError(null)} />}
-        
-        {/* Mobile Tab Navigation */}
-        <div className="md:hidden flex border-b border-slate-200 bg-slate-50">
-          <TabButton label="Chat" isActive={activeTab === 'chat'} onClick={() => setActiveTab('chat')} />
-          <TabButton label="Inventory" isActive={activeTab === 'inventory'} onClick={() => setActiveTab('inventory')} />
-        </div>
-        
+    <div className="flex flex-col h-[100dvh] bg-white text-slate-800 font-sans">
+      {error && <ErrorDisplay message={error} onClose={() => setError(null)} />}
+
+      {/* Mobile Tab Navigation - Always visible */}
+      <div className="md:hidden flex border-b border-slate-200 bg-slate-50 flex-shrink-0">
+        <TabButton label="Chat" isActive={activeTab === 'chat'} onClick={() => setActiveTab('chat')} />
+        <TabButton label="Inventory" isActive={activeTab === 'inventory'} onClick={() => setActiveTab('inventory')} />
+      </div>
+
+      {/* Main content area - scrollable */}
+      <main className="flex flex-1 md:flex-row overflow-hidden min-h-0">
         {/* Panels */}
         <div className={`flex-col h-full ${activeTab === 'chat' ? 'flex' : 'hidden'} md:flex md:w-3/5 md:border-r md:border-slate-200`}>
           <ChatPanel
@@ -164,8 +166,8 @@ const App: React.FC = () => {
         <div className={`flex-col h-full ${activeTab === 'inventory' ? 'flex' : 'hidden'} md:flex md:w-2/5`}>
           <InventoryPanel bin={currentBinInfo} items={inventoryItems} onImageSelect={handleImageSelect} />
         </div>
-
       </main>
+
       {isCameraOpen && <CameraModal onClose={toggleCamera} onImageCapture={handleImageCapture} />}
       {selectedImage && <ImageModal imageUrl={selectedImage} onClose={handleCloseImageModal} />}
     </div>
