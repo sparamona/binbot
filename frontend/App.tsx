@@ -150,7 +150,7 @@ const App: React.FC = () => {
       {/* Main content area - scrollable */}
       <main className="flex flex-1 md:flex-row overflow-hidden min-h-0">
         {/* Panels */}
-        <div className={`flex-col h-full ${activeTab === 'chat' ? 'flex' : 'hidden'} md:flex md:w-3/5 md:border-r md:border-slate-200`}>
+        <div className={`flex-col h-full w-full ${activeTab === 'chat' ? 'flex' : 'hidden'} md:flex md:w-3/5 md:border-r md:border-slate-200`}>
           <ChatPanel
             messages={messages}
             onSendMessage={handleSendMessage}
@@ -163,7 +163,7 @@ const App: React.FC = () => {
           />
         </div>
 
-        <div className={`flex-col h-full ${activeTab === 'inventory' ? 'flex' : 'hidden'} md:flex md:w-2/5`}>
+        <div className={`flex-col h-full w-full ${activeTab === 'inventory' ? 'flex' : 'hidden'} md:flex md:w-2/5`}>
           <InventoryPanel bin={currentBinInfo} items={inventoryItems} onImageSelect={handleImageSelect} />
         </div>
       </main>

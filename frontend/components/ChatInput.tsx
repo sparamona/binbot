@@ -19,11 +19,18 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onCameraClick, dis
   const [isSpeechRecognitionEnabled, setIsSpeechRecognitionEnabled] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Speech recognition that populates the input field when enabled
+  // Speech recognition that populates the input field and auto-submits
   const handleTranscriptUpdate = useCallback((transcript: string) => {
     console.log('📝 ChatInput received transcript update:', transcript);
     setText(transcript);
-  }, []);
+
+    // Auto-submit speech recognition results
+    if (transcript.trim()) {
+      console.log('🎤 Auto-submitting speech recognition result:', transcript);
+      onSendMessage(transcript, true); // true = voice input
+      setText(''); // Clear after sending
+    }
+  }, [onSendMessage]);
 
   // Disable speech recognition while TTS is speaking to prevent interference
   const speechRecognitionActive = isSpeechRecognitionEnabled && !isTTSSpeaking;
