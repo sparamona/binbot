@@ -85,7 +85,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ onClose, onImageCapture }) =>
                         { exact: deviceId || currentDeviceId } : true,
                     width: { ideal: 1280, max: 1920 },
                     height: { ideal: 720, max: 1080 },
-                    facingMode: 'user' // Prefer front camera
+                    facingMode: 'environment' // Prefer back camera
                 },
                 audio: false
             };
