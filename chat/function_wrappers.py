@@ -13,6 +13,10 @@ from api_schemas import ItemInput
 from session.session_manager import get_session_manager
 from utils.logging import setup_logger
 
+
+# Add constant at top of file
+ENABLE_FUNCTION_LOGGING = True
+
 # Set up logger for function wrappers
 logger = setup_logger(__name__)
 
@@ -26,6 +30,10 @@ class InventoryFunctionWrappers:
 
     def _log_function_call_and_response(self, function_name: str, args: Dict[str, Any], response: Dict[str, Any]):
         """Log function call and response to conversation history"""
+
+        if not ENABLE_FUNCTION_LOGGING:
+            return
+            
         try:
             # Create a structured log entry with both call and response
             log_entry = {
