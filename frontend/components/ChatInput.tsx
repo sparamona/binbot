@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import Button from './Button';
-import { SendIcon, CameraIcon, MicIcon } from './icons';
+import { SendIcon, CameraIcon, MicIcon, SpeakerIcon } from './icons';
 import { useContinuousSpeech } from '../hooks/useContinuousSpeech';
 
 interface ChatInputProps {
@@ -93,7 +93,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onCameraClick, dis
               onClick={onTTSToggle}
               className="flex-1 md:flex-none"
             >
-              <span className="w-5 h-5" >🔊</span>
+              <SpeakerIcon className="w-5 h-5" />
             </Button>
 
             {/* Photo button */}
