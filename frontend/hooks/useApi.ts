@@ -18,7 +18,7 @@ export function useChat(onInventoryUpdate?: () => void) {
   }>>([
     {
       id: 1,
-      text: 'Welcome to **BinBot**! 🤖\n\nI can help you manage your inventory:\n- Add items to bins\n- Search for items\n- Check bin contents\n- Upload images for analysis\n\nTry saying: `"add hammer to bin A"` or `"what\'s in bin B"`',
+      text: 'Welcome to **BinBot**! 🤖\n\nI can help you manage your inventory:\n- Add items to bins\n- Search for items\n- Check bin contents\n- Upload images for analysis\n\nTry saying: `"add hammer to bin 12"` or `"what\'s in bin 7"`',
       sender: 'bot',
       timestamp: new Date().toLocaleTimeString('en-US', {
         hour: 'numeric',
