@@ -15,7 +15,7 @@ from utils.logging import setup_logger
 
 
 # Add constant at top of file
-ENABLE_FUNCTION_LOGGING = True
+ENABLE_FUNCTION_LOGGING = False
 
 # Set up logger for function wrappers
 logger = setup_logger(__name__)
@@ -35,15 +35,6 @@ class InventoryFunctionWrappers:
             return
             
         try:
-            # Create a structured log entry with both call and response
-            log_entry = {
-                "function_call": {
-                    "name": function_name,
-                    "arguments": args
-                },
-                "function_response": response
-            }
-
             # Add to conversation history as a model message (Gemini only accepts 'user' and 'model' roles)
             log_message = f"FUNCTION_CALL: {function_name}({', '.join(f'{k}={v}' for k, v in args.items())})\nRESPONSE: {json.dumps(response, indent=2)}"
             self.session_manager.add_message(self.session_id, "model", log_message)
