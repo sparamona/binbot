@@ -1,13 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
-import ChatPanel from './components/ChatPanel';
-import InventoryPanel from './components/InventoryPanel';
 import CameraModal from './components/CameraModal';
-import ImageModal from './components/ImageModal';
+import ChatPanel from './components/ChatPanel';
 import ErrorDisplay from './components/ErrorDisplay';
+import ImageModal from './components/ImageModal';
+import InventoryPanel from './components/InventoryPanel';
 import { useChat, useInventory } from './hooks/useApi';
 import { useTextToSpeech } from './hooks/useTextToSpeech';
-import type { Message, InventoryItem } from './types';
 
 const App: React.FC = () => {
   // Initialize inventory hook first
@@ -43,7 +42,7 @@ const App: React.FC = () => {
     if (!isTTSEnabled) {
       tts.stopSpeaking();
     }
-  }, [isTTSEnabled, tts]);
+  }, [isTTSEnabled]);
 
   // Auto-speak bot responses when TTS is enabled (only when new messages arrive)
   useEffect(() => {
