@@ -12,6 +12,7 @@ export function useContinuousSpeech(onTranscriptUpdate: (text: string) => void, 
   const [isListening, setIsListening] = useState(false);
 
   useEffect(() => {
+    console.log('🎤 DEBUG: useContinuousSpeech - enabled:', enabled);
     if (!window.SpeechRecognition && !window.webkitSpeechRecognition) {
       console.log('🎤 Speech recognition not supported in this browser');
       return;
@@ -42,7 +43,6 @@ export function useContinuousSpeech(onTranscriptUpdate: (text: string) => void, 
 
     recognition.onend = () => {
       console.log('🎤 Speech recognition ended');
-      setIsListening(false);
       // Only restart if still enabled
       if (enabled) {
         setTimeout(() => {
@@ -50,7 +50,9 @@ export function useContinuousSpeech(onTranscriptUpdate: (text: string) => void, 
             console.log('🎤 Restarting speech recognition...');
             recognitionRef.current.start();
           }
-        }, 100);
+        }, 500);
+      } else {
+          setIsListening(false);
       }
     };
 
@@ -69,8 +71,11 @@ export function useContinuousSpeech(onTranscriptUpdate: (text: string) => void, 
       onTranscriptUpdate(transcript);
     };
 
-    recognition.start();
-    recognitionRef.current = recognition;
+
+    if (!recognitionRef?.current && enabled) {
+      recognition.start();
+      recognitionRef.current = recognition;
+    }
 
     return () => {
       console.log('🎤 Cleaning up speech recognition...');
@@ -79,7 +84,7 @@ export function useContinuousSpeech(onTranscriptUpdate: (text: string) => void, 
       }
       setIsListening(false);
     };
-  }, [onTranscriptUpdate, enabled]);
+  }, [enabled]);
 
   return { isListening };
 }
