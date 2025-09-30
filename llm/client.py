@@ -10,7 +10,7 @@ from config.settings import GEMINI_API_KEY
 from llm.prompts import SYSTEM_INSTRUCTIONS, TTS_SYSTEM_INSTRUCTIONS
 
 # Model configuration
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-2.5-flash-lite"
 
 
 class GeminiClient:
