@@ -15,7 +15,6 @@ const App: React.FC = () => {
 
   // TTS toggle state
   const [isTTSEnabled, setIsTTSEnabled] = useState(false);
-  const lastSpokenMessageRef = useRef<string>('');
 
   // Text-to-speech functionality
   const tts = useTextToSpeech({
@@ -46,12 +45,12 @@ const App: React.FC = () => {
 
   // Auto-speak bot responses when TTS is enabled (only when new messages arrive)
   useEffect(() => {
+    console.log('TTS messages updated:', messages);
     if (messages.length > 0 && isTTSEnabled) {
       const lastMessage = messages[messages.length - 1];
-      if (lastMessage.sender === 'bot' && lastMessage.text !== lastSpokenMessageRef.current) {
+      if (lastMessage.sender === 'bot') {
         console.log('🔊 Auto-speaking new bot response:', lastMessage.text.substring(0, 50) + '...');
         tts.speak(lastMessage.text);
-        lastSpokenMessageRef.current = lastMessage.text;
       }
     }
   }, [messages]);

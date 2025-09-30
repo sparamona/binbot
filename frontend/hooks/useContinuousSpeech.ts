@@ -21,7 +21,7 @@ export function useContinuousSpeech(onTranscriptUpdate: (text: string) => void, 
     if (!enabled) {
       // Stop recognition if disabled
       if (recognitionRef.current) {
-        console.log('🎤 Stopping speech recognition (disabled)');
+        // console.log('🎤 Stopping speech recognition (disabled)');
         recognitionRef.current.stop();
         recognitionRef.current = null;
       }
@@ -29,7 +29,7 @@ export function useContinuousSpeech(onTranscriptUpdate: (text: string) => void, 
       return;
     }
 
-    console.log('🎤 Starting speech recognition...');
+    // console.log('🎤 Starting speech recognition...');
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
 
@@ -37,17 +37,17 @@ export function useContinuousSpeech(onTranscriptUpdate: (text: string) => void, 
     recognition.interimResults = false;
 
     recognition.onstart = () => {
-      console.log('🎤 Speech recognition started');
+      // console.log('🎤 Speech recognition started');
       setIsListening(true);
     };
 
     recognition.onend = () => {
-      console.log('🎤 Speech recognition ended');
+      // console.log('🎤 Speech recognition ended');
       // Only restart if still enabled
       if (enabled) {
         setTimeout(() => {
           if (recognitionRef.current && enabled) {
-            console.log('🎤 Restarting speech recognition...');
+            // console.log('🎤 Restarting speech recognition...');
             recognitionRef.current.start();
           }
         }, 500);
@@ -78,7 +78,7 @@ export function useContinuousSpeech(onTranscriptUpdate: (text: string) => void, 
     }
 
     return () => {
-      console.log('🎤 Cleaning up speech recognition...');
+      // console.log('🎤 Cleaning up speech recognition...');
       if (recognitionRef.current) {
         recognitionRef.current.stop();
       }

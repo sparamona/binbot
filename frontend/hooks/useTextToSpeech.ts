@@ -36,6 +36,7 @@ export function useTextToSpeech(options: { onStart?: () => void; onEnd?: () => v
 
       audio.onplay = () => {
         setIsSpeaking(true);
+        console.log('TTS playback started');
         if (onStart) onStart();
       };
 
@@ -43,6 +44,7 @@ export function useTextToSpeech(options: { onStart?: () => void; onEnd?: () => v
         URL.revokeObjectURL(audioUrl);
         setIsSpeaking(false);
         audioRef.current = null;
+        console.log('TTS playback ended');
         if (onEnd) onEnd();
       };
 
@@ -59,7 +61,7 @@ export function useTextToSpeech(options: { onStart?: () => void; onEnd?: () => v
       setIsSpeaking(false);
       if (onError) onError(error instanceof Error ? error.message : 'TTS failed');
     }
-  }, [onStart, onEnd, onError, stopSpeaking]);
+  }, [stopSpeaking]);
 
   return {
     isSpeaking,
